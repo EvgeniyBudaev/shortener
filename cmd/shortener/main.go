@@ -2,6 +2,8 @@ package main
 
 import (
 	"crypto/rand"
+	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -27,8 +29,17 @@ func GenerateRandomString(n int) (string, error) {
 
 func mainPage(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
-		reqPathElements := strings.Split(req.URL.Path, "/")
-		id := reqPathElements[len(reqPathElements)-1]
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		id, err := GenerateRandomString(8)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		urls[id] = body
 		res.Header().Set("Content-Type", "text/plain")
 		res.WriteHeader(http.StatusCreated)
 		res.Write([]byte(httpProtocol + req.Host + "/" + id))
