@@ -5,25 +5,29 @@ import (
 	"strings"
 )
 
+var urls = make(map[string][]byte)
+
 func mainPage(res http.ResponseWriter, req *http.Request) {
 	host := req.Host
 	path := req.URL.Path
 	url := host + path
-	id := strings.TrimPrefix(req.URL.Path, "/")
 
 	if req.Method == http.MethodPost {
 		res.Header().Set("Content-Type", "text/plain")
 		res.WriteHeader(http.StatusCreated)
 		res.Write([]byte(url))
+
 		return
-	} else if id != "" && req.Method == http.MethodGet {
-		res.Header().Set("Content-Type", "text/plain")
-		res.Header().Add("Location", id)
+	} else if req.Method == http.MethodGet {
+		reqPathElements := strings.Split(req.URL.Path, "/")
+		id := reqPathElements[len(reqPathElements)-1]
+		res.Header().Set("Location", string(urls[id]))
 		res.WriteHeader(http.StatusTemporaryRedirect)
+
 		return
-	} else {
-		http.Error(res, "Bad Request", http.StatusBadRequest)
 	}
+
+	res.WriteHeader(http.StatusBadRequest)
 }
 
 func main() {
