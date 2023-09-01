@@ -12,12 +12,15 @@ func mainPage(res http.ResponseWriter, req *http.Request) {
 	id := strings.TrimPrefix(req.URL.Path, "/")
 
 	if req.Method == http.MethodPost {
-		res.Header().Set("content-type", "text/plain")
+		res.Header().Set("Content-Type", "text/plain")
 		res.WriteHeader(http.StatusCreated)
 		res.Write([]byte(url))
+		return
 	} else if id != "" && req.Method == http.MethodGet {
-		res.Header().Set("content-type", "text/plain")
+		res.Header().Set("Content-Type", "text/plain")
+		res.Header().Add("Location", id)
 		res.WriteHeader(http.StatusTemporaryRedirect)
+		return
 	} else {
 		http.Error(res, "Bad Request", http.StatusBadRequest)
 	}
