@@ -43,7 +43,7 @@ func shortURL(res http.ResponseWriter, req *http.Request, urls map[string][]byte
 	res.Write([]byte(httpProtocol + req.Host + "/" + id))
 }
 
-func redirectUrl(res http.ResponseWriter, req *http.Request, urls map[string][]byte) {
+func redirectURL(res http.ResponseWriter, req *http.Request, urls map[string][]byte) {
 	reqPathElements := strings.Split(req.URL.Path, "/")
 	id := reqPathElements[len(reqPathElements)-1]
 	originalURL := urls[id]
@@ -62,7 +62,7 @@ func URLHandler(urls map[string][]byte) http.HandlerFunc {
 			shortURL(res, req, urls)
 			return
 		} else if req.Method == http.MethodGet {
-			redirectUrl(res, req, urls)
+			redirectURL(res, req, urls)
 			return
 		}
 

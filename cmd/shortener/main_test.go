@@ -55,7 +55,7 @@ func TestShortUrl(t *testing.T) {
 	}
 }
 
-func TestRedirectUrl(t *testing.T) {
+func TestRedirectURL(t *testing.T) {
 	type args struct {
 		urls           map[string][]byte
 		shortURL       string
