@@ -11,8 +11,6 @@ import (
 
 const httpProtocol = "http://"
 
-var urls = make(map[string][]byte)
-
 func GenerateRandomString(n int) (string, error) {
 	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	ret := make([]byte, n)
@@ -27,39 +25,55 @@ func GenerateRandomString(n int) (string, error) {
 	return string(ret), nil
 }
 
-func mainPage(res http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodPost {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
+func shortURL(res http.ResponseWriter, req *http.Request, urls map[string][]byte) {
+	defer req.Body.Close()
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		id, err := GenerateRandomString(8)
-		if err != nil {
-			log.Fatal(err)
-		}
-		urls[id] = body
+	id, err := GenerateRandomString(10)
+	if err != nil {
+		log.Fatal(err)
+	}
+	urls[id] = body
 
-		res.Header().Set("Content-Type", "text/plain")
-		res.WriteHeader(http.StatusCreated)
-		res.Write([]byte(httpProtocol + req.Host + "/" + id))
+	res.Header().Set("Content-Type", "text/plain")
+	res.WriteHeader(http.StatusCreated)
+	res.Write([]byte(httpProtocol + req.Host + "/" + id))
+}
 
-		return
-	} else if req.Method == http.MethodGet {
-		reqPathElements := strings.Split(req.URL.Path, "/")
-		id := reqPathElements[len(reqPathElements)-1]
-		res.Header().Set("Location", string(urls[id]))
-		res.WriteHeader(http.StatusTemporaryRedirect)
-
+func redirectUrl(res http.ResponseWriter, req *http.Request, urls map[string][]byte) {
+	reqPathElements := strings.Split(req.URL.Path, "/")
+	id := reqPathElements[len(reqPathElements)-1]
+	originalURL := urls[id]
+	if originalURL == nil {
+		res.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	res.WriteHeader(http.StatusBadRequest)
+	res.Header().Set("Location", string(originalURL))
+	res.WriteHeader(http.StatusTemporaryRedirect)
+}
+
+func UrlHandler(urls map[string][]byte) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodPost {
+			shortURL(res, req, urls)
+			return
+		} else if req.Method == http.MethodGet {
+			redirectUrl(res, req, urls)
+			return
+		}
+
+		res.WriteHeader(http.StatusBadRequest)
+	}
 }
 
 func main() {
+	var urls = make(map[string][]byte)
 	mux := http.NewServeMux()
-	mux.HandleFunc(`/`, mainPage)
+	mux.HandleFunc(`/`, UrlHandler(urls))
 
 	err := http.ListenAndServe(`:8080`, mux)
 	if err != nil {
