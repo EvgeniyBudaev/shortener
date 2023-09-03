@@ -11,7 +11,7 @@ import (
 
 const httpProtocol = "http://"
 
-func GenerateRandomString(n int) (string, error) {
+func generateRandomString(n int) (string, error) {
 	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	ret := make([]byte, n)
 	for i := 0; i < n; i++ {
@@ -32,7 +32,7 @@ func shortURL(res http.ResponseWriter, req *http.Request, urls map[string][]byte
 		log.Fatal(err)
 	}
 
-	id, err := GenerateRandomString(10)
+	id, err := generateRandomString(10)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func redirectUrl(res http.ResponseWriter, req *http.Request, urls map[string][]b
 	res.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-func UrlHandler(urls map[string][]byte) http.HandlerFunc {
+func URLHandler(urls map[string][]byte) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodPost {
 			shortURL(res, req, urls)
@@ -73,7 +73,7 @@ func UrlHandler(urls map[string][]byte) http.HandlerFunc {
 func main() {
 	var urls = make(map[string][]byte)
 	mux := http.NewServeMux()
-	mux.HandleFunc(`/`, UrlHandler(urls))
+	mux.HandleFunc(`/`, URLHandler(urls))
 
 	err := http.ListenAndServe(`:8080`, mux)
 	if err != nil {

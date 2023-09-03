@@ -39,7 +39,7 @@ func TestShortUrl(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			handler := UrlHandler(test.args.urls)
+			handler := URLHandler(test.args.urls)
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
 
 			w := httptest.NewRecorder()
@@ -89,10 +89,10 @@ func TestRedirectUrl(t *testing.T) {
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler := UrlHandler(tt.args.urls)
-			req := httptest.NewRequest(http.MethodGet, "/"+tt.args.shortURL, nil)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := URLHandler(test.args.urls)
+			req := httptest.NewRequest(http.MethodGet, "/"+test.args.shortURL, nil)
 
 			w := httptest.NewRecorder()
 			handler(w, req)
@@ -102,8 +102,8 @@ func TestRedirectUrl(t *testing.T) {
 			_, err := io.ReadAll(res.Body)
 
 			require.NoError(t, err)
-			if tt.args.shouldRedirect {
-				assert.Equal(t, res.Header.Get("Location"), tt.args.originalURL)
+			if test.args.shouldRedirect {
+				assert.Equal(t, res.Header.Get("Location"), test.args.originalURL)
 				assert.Equal(t, res.StatusCode, http.StatusTemporaryRedirect)
 			} else {
 				assert.Equal(t, res.StatusCode, http.StatusNotFound)
