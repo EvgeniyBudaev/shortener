@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -39,11 +40,12 @@ func TestShortUrl(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			handler := URLHandler(test.args.urls)
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+			r := setupRouter(&test.args.urls)
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
 
-			w := httptest.NewRecorder()
-			handler(w, req)
+			r.ServeHTTP(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
@@ -51,6 +53,7 @@ func TestShortUrl(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.NotEmpty(t, body)
+			assert.Contains(t, string(body), "http://")
 		})
 	}
 }
@@ -73,7 +76,7 @@ func TestRedirectURL(t *testing.T) {
 					"1": []byte("http://test.ru"),
 				},
 				originalURL:    "http://test.ru",
-				shortURL:       "1",
+				shortURL:       "/1",
 				shouldRedirect: true,
 			},
 		},
@@ -84,29 +87,28 @@ func TestRedirectURL(t *testing.T) {
 					"1": []byte("http://test.ru"),
 				},
 				originalURL:    "http://test.ru",
-				shortURL:       "2",
+				shortURL:       "/2",
 				shouldRedirect: false,
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			handler := URLHandler(test.args.urls)
-			req := httptest.NewRequest(http.MethodGet, "/"+test.args.shortURL, nil)
-
+			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
-			handler(w, req)
+			r := setupRouter(&test.args.urls)
+			req := httptest.NewRequest(http.MethodGet, test.args.shortURL, nil)
+
+			r.ServeHTTP(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
-			_, err := io.ReadAll(res.Body)
 
-			require.NoError(t, err)
 			if test.args.shouldRedirect {
-				assert.Equal(t, res.Header.Get("Location"), test.args.originalURL)
-				assert.Equal(t, res.StatusCode, http.StatusTemporaryRedirect)
+				assert.Equal(t, test.args.originalURL, res.Header.Get("Location"))
+				assert.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
 			} else {
-				assert.Equal(t, res.StatusCode, http.StatusNotFound)
+				assert.Equal(t, http.StatusNotFound, res.StatusCode)
 			}
 		})
 	}
