@@ -76,8 +76,9 @@ func setupRouter(ptrUrls *map[string][]byte) *gin.Engine {
 }
 
 func main() {
+	initFlags()
 	var urls = make(map[string][]byte)
 
 	r := setupRouter(&urls)
-	log.Fatal(r.Run())
+	log.Fatal(r.Run(config.flagRunAddr))
 }
