@@ -3,6 +3,7 @@ module github.com/EvgeniyBudaev/shortener
 go 1.21
 
 require (
+	github.com/caarlos0/env/v6 v6.10.1
 	github.com/gin-gonic/gin v1.9.1
 	github.com/stretchr/testify v1.8.4
 )
