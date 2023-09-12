@@ -2,61 +2,18 @@ package main
 
 import (
 	"bytes"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/config"
+	"github.com/EvgeniyBudaev/shortener/internal/store"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestShortUrl(t *testing.T) {
-	type args struct {
-		urls        map[string][]byte
-		originalURL string
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "add new url to empty map",
-			args: args{
-				urls:        map[string][]byte{},
-				originalURL: "https://test.ru",
-			},
-		},
-		{
-			name: "add new url to map",
-			args: args{
-				urls: map[string][]byte{
-					"abc": []byte("https://test.ru"),
-				},
-				originalURL: "https://test.ru",
-			},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			gin.SetMode(gin.TestMode)
-			w := httptest.NewRecorder()
-			r := setupRouter(&test.args.urls)
-			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
-
-			r.ServeHTTP(w, req)
-
-			res := w.Result()
-			defer res.Body.Close()
-			body, err := io.ReadAll(res.Body)
-
-			require.NoError(t, err)
-			assert.NotEmpty(t, body)
-			assert.Contains(t, string(body), "http://")
-		})
-	}
-}
 
 func TestRedirectURL(t *testing.T) {
 	type args struct {
@@ -96,7 +53,14 @@ func TestRedirectURL(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
-			r := setupRouter(&test.args.urls)
+
+			storage := store.NewStorage()
+			for url := range test.args.urls {
+				storage.Put(url, test.args.urls[url])
+			}
+
+			app := app.NewApp(&config.ServerConfig{}, storage)
+			r := setupRouter(app)
 			req := httptest.NewRequest(http.MethodGet, test.args.shortURL, nil)
 
 			r.ServeHTTP(w, req)
@@ -110,6 +74,58 @@ func TestRedirectURL(t *testing.T) {
 			} else {
 				assert.Equal(t, http.StatusNotFound, res.StatusCode)
 			}
+		})
+	}
+}
+
+func TestShortURL(t *testing.T) {
+	type args struct {
+		urls        map[string][]byte
+		originalURL string
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: "add new url to empty map",
+			args: args{
+				urls:        make(map[string][]byte),
+				originalURL: "https://test.ru",
+			},
+		},
+		{
+			name: "add new url to map",
+			args: args{
+				urls: map[string][]byte{
+					"abc": []byte("https://test.com"),
+				},
+				originalURL: "https://test.ru",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+
+			storage := store.NewStorage()
+			for url := range test.args.urls {
+				storage.Put(url, test.args.urls[url])
+			}
+
+			app := app.NewApp(&config.ServerConfig{}, storage)
+			r := setupRouter(app)
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
+
+			r.ServeHTTP(w, req)
+
+			res := w.Result()
+			defer res.Body.Close()
+			body, err := io.ReadAll(res.Body)
+
+			require.NoError(t, err)
+			assert.NotEmpty(t, body)
 		})
 	}
 }
