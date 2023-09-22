@@ -5,12 +5,14 @@ import (
 
 	"github.com/EvgeniyBudaev/shortener/internal/app"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
+	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/gin-gonic/gin"
 )
 
 func setupRouter(a *app.App) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	r.Use(ginLogger.Logger())
 
 	r.GET("/:id", a.RedirectURL)
 	r.POST("/", a.ShortURL)
