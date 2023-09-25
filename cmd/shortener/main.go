@@ -7,12 +7,14 @@ import (
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 )
 
 func setupRouter(a *app.App) *gin.Engine {
 	r := gin.New()
 	r.Use(ginLogger.Logger())
+	r.Use(gzip.Gzip(gzip.BestCompression, gzip.WithDecompressFn(gzip.DefaultDecompressHandle)))
 
 	r.GET("/:id", a.RedirectURL)
 	r.POST("/", a.ShortURL)

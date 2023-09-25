@@ -2,16 +2,14 @@ package app
 
 import (
 	"encoding/json"
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"strings"
-
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/EvgeniyBudaev/shortener/internal/utils"
 	"github.com/gin-gonic/gin"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
 )
 
 type (
@@ -57,10 +55,8 @@ func (a *App) ShortURL(c *gin.Context) {
 
 	var originalURL string
 
-	contentType := req.Header.Get("Content-Type")
-	woCharset := strings.Split(contentType, ";")
-	switch woCharset[0] {
-	case "application/json":
+	switch req.RequestURI {
+	case "/api/shorten":
 		var shorten ShortenReq
 		if err := json.NewDecoder(req.Body).Decode(&shorten); err != nil {
 			log.Printf("Body cannot be decoded: %v", err)
@@ -68,7 +64,7 @@ func (a *App) ShortURL(c *gin.Context) {
 			return
 		}
 		originalURL = shorten.URL
-	case "text/plain":
+	case "/":
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			log.Printf("Body cannot be read: %v", err)
@@ -76,10 +72,6 @@ func (a *App) ShortURL(c *gin.Context) {
 			return
 		}
 		originalURL = string(body)
-	default:
-		log.Printf("Invalid Content-Type: %v", req.Header.Get("Content-Type"))
-		res.WriteHeader(http.StatusInternalServerError)
-		return
 	}
 
 	id, err := utils.GenerateRandomString(8)
@@ -98,8 +90,8 @@ func (a *App) ShortURL(c *gin.Context) {
 
 	a.store.Put(id, originalURL)
 
-	switch woCharset[0] {
-	case "application/json":
+	switch req.RequestURI {
+	case "/api/shorten":
 		respURL := ShortenRes{
 			Result: resultURL,
 		}
@@ -113,7 +105,7 @@ func (a *App) ShortURL(c *gin.Context) {
 		res.WriteHeader(http.StatusCreated)
 		res.Write(resp)
 
-	case "text/plain":
+	case "/":
 		res.Header().Set("Content-Type", "text/plain")
 		res.WriteHeader(http.StatusCreated)
 		if _, err := res.Write([]byte(resultURL)); err != nil {
