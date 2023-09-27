@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/EvgeniyBudaev/shortener/internal/app"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	App "github.com/EvgeniyBudaev/shortener/internal/app"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/gin-gonic/gin"
@@ -55,13 +55,18 @@ func TestRedirectURL(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			storage := store.NewStorage()
+			storage, err := store.NewStorage("./test.json")
+			if err != nil {
+				t.Errorf("failed to initialize a new storage: %v", err)
+				return
+			}
+			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
 				storage.Put(url, test.args.urls[url])
 			}
 
-			app := App.NewApp(&config.ServerConfig{}, storage)
-			r := setupRouter(app)
+			testApp := app.NewApp(&config.ServerConfig{}, storage)
+			r := setupRouter(testApp)
 			req := httptest.NewRequest(http.MethodGet, test.args.shortURL, nil)
 
 			r.ServeHTTP(w, req)
@@ -110,13 +115,18 @@ func TestShortURLV1(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			storage := store.NewStorage()
+			storage, err := store.NewStorage("./test.json")
+			if err != nil {
+				t.Errorf("failed to initialize a new storage: %v", err)
+				return
+			}
+			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
 				storage.Put(url, test.args.urls[url])
 			}
 
-			app := App.NewApp(&config.ServerConfig{}, storage)
-			r := setupRouter(app)
+			testApp := app.NewApp(&config.ServerConfig{}, storage)
+			r := setupRouter(testApp)
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
 			req.Header.Add("Content-Type", "text/plain")
 
@@ -164,14 +174,19 @@ func TestShortURLV2(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			storage := store.NewStorage()
+			storage, err := store.NewStorage("./test.json")
+			if err != nil {
+				t.Errorf("failed to initialize a new storage: %v", err)
+				return
+			}
+			defer storage.DeleteStorageFile()
 			for url := range tt.args.urls {
 				storage.Put(url, tt.args.urls[url])
 			}
 
-			app := App.NewApp(&config.ServerConfig{}, storage)
-			r := setupRouter(app)
-			reqObj := App.ShortenReq{
+			testApp := app.NewApp(&config.ServerConfig{}, storage)
+			r := setupRouter(testApp)
+			reqObj := app.ShortenReq{
 				URL: tt.args.originalURL,
 			}
 			obj, err := json.Marshal(reqObj)

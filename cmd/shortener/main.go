@@ -13,7 +13,11 @@ import (
 
 func setupRouter(a *app.App) *gin.Engine {
 	r := gin.New()
-	r.Use(ginLogger.Logger())
+	ginLoggerMiddleware, err := ginLogger.Logger()
+	if err != nil {
+		log.Fatal(err)
+	}
+	r.Use(ginLoggerMiddleware)
 	r.Use(gzip.Gzip(gzip.BestCompression, gzip.WithDecompressFn(gzip.DefaultDecompressHandle)))
 
 	r.GET("/:id", a.RedirectURL)
@@ -32,7 +36,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	intApp := app.NewApp(initConfig, store.NewStorage())
+	storage, err := store.NewStorage(initConfig.FileStoragePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	intApp := app.NewApp(initConfig, storage)
 
 	r := setupRouter(intApp)
 	log.Fatal(r.Run(initConfig.FlagRunAddr))
