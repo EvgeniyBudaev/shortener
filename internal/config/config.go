@@ -18,7 +18,7 @@ var serverConfig ServerConfig
 func InitFlags() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.FlagRunAddr, "a", ":8080", "address and port to run server")
 	flag.StringVar(&serverConfig.RedirectBaseURL, "b", "http://localhost:8080", "server URI prefix")
-	flag.StringVar(&serverConfig.FileStoragePath, "f", "/tmp/short-url-db.json", "file storage path")
+	flag.StringVar(&serverConfig.FileStoragePath, "f", "", "file storage path")
 	flag.StringVar(&serverConfig.DatabaseDSN, "d", "", "Data Source Name (DSN)")
 	flag.Parse()
 

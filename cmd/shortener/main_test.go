@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/EvgeniyBudaev/shortener/internal/config"
-	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,20 +56,17 @@ func TestRedirectURL(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			s, err := store.NewStorage("./test.json")
+			storage, err := fs.NewFileStorage("./test.json")
 			if err != nil {
 				t.Errorf("failed to initialize a new storage: %v", err)
 				return
 			}
-			defer s.DeleteStorageFile()
-			var storage app.Store
-			storage.Get = s.Get
-			storage.Put = s.Put
+			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
 				storage.Put(url, test.args.urls[url])
 			}
 
-			testApp := app.NewApp(&config.ServerConfig{}, &storage)
+			testApp := app.NewApp(&config.ServerConfig{}, storage)
 			r := setupRouter(testApp)
 			req := httptest.NewRequest(http.MethodGet, test.args.shortURL, nil)
 
@@ -118,20 +116,17 @@ func TestShortURLV1(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			s, err := store.NewStorage("./test.json")
+			storage, err := fs.NewFileStorage("./test.json")
 			if err != nil {
 				t.Errorf("failed to initialize a new storage: %v", err)
 				return
 			}
-			defer s.DeleteStorageFile()
-			var storage app.Store
-			storage.Get = s.Get
-			storage.Put = s.Put
+			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
 				storage.Put(url, test.args.urls[url])
 			}
 
-			testApp := app.NewApp(&config.ServerConfig{}, &storage)
+			testApp := app.NewApp(&config.ServerConfig{}, storage)
 			r := setupRouter(testApp)
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
 			req.Header.Add("Content-Type", "text/plain")
@@ -180,22 +175,19 @@ func TestShortURLV2(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			s, err := store.NewStorage("./test.json")
+			storage, err := fs.NewFileStorage("./test.json")
 			if err != nil {
 				t.Errorf("failed to initialize a new storage: %v", err)
 				return
 			}
-			defer s.DeleteStorageFile()
-			var storage app.Store
-			storage.Get = s.Get
-			storage.Put = s.Put
+			defer storage.DeleteStorageFile()
 			for url := range tt.args.urls {
 				storage.Put(url, tt.args.urls[url])
 			}
 
-			testApp := app.NewApp(&config.ServerConfig{}, &storage)
+			testApp := app.NewApp(&config.ServerConfig{}, storage)
 			r := setupRouter(testApp)
-			reqObj := app.ShortenReq{
+			reqObj := models.ShortenReq{
 				URL: tt.args.originalURL,
 			}
 			obj, err := json.Marshal(reqObj)

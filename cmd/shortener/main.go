@@ -22,7 +22,7 @@ func setupRouter(a *app.App) *gin.Engine {
 
 	r.GET("/:id", a.RedirectURL)
 	r.POST("/", a.ShortURL)
-	r.GET("/ping", a.DBPingCheck)
+	r.GET("/ping", a.Ping)
 
 	api := r.Group("/api")
 	{
@@ -38,27 +38,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var storage app.Store
-	if initConfig.DatabaseDSN != "" {
-		s, err := store.NewDBStore(initConfig.DatabaseDSN)
-		if err != nil {
-			log.Fatal(err)
-		}
-		storage.Get = s.Get
-		storage.Put = s.Put
-		storage.GetBatch = s.GetBatch
-		storage.PutBatch = s.PutBatch
-		defer s.Close()
-	} else {
-		s, err := store.NewStorage(initConfig.FileStoragePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-		storage.Get = s.Get
-		storage.Put = s.Put
-	}
-	intApp := app.NewApp(initConfig, &storage)
 
-	r := setupRouter(intApp)
+	storage, err := store.NewStore(initConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	appInit := app.NewApp(initConfig, storage)
+
+	r := setupRouter(appInit)
 	log.Fatal(r.Run(initConfig.FlagRunAddr))
 }
