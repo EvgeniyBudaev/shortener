@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
-	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/EvgeniyBudaev/shortener/internal/utils"
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -16,10 +15,15 @@ import (
 
 const driverName = "pgx"
 
+type Store struct {
+	Get func(id string) (string, error)
+	Put func(id string, url string) error
+}
+
 type (
 	App struct {
 		config *config.ServerConfig
-		store  *store.Storage
+		store  *Store
 	}
 
 	ShortenReq struct {
@@ -31,7 +35,7 @@ type (
 	}
 )
 
-func NewApp(config *config.ServerConfig, storage *store.Storage) *App {
+func NewApp(config *config.ServerConfig, storage *Store) *App {
 	return &App{
 		config: config,
 		store:  storage,
@@ -42,7 +46,12 @@ func (a *App) RedirectURL(c *gin.Context) {
 	res := c.Writer
 	id := c.Param("id")
 
-	originalURL := a.store.Get(id)
+	originalURL, err := a.store.Get(id)
+	if err != nil {
+		log.Printf("Error getting original URL: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	if originalURL == "" {
 		res.WriteHeader(http.StatusNotFound)
