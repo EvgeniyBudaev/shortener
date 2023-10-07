@@ -27,6 +27,7 @@ func setupRouter(a *app.App) *gin.Engine {
 	api := r.Group("/api")
 	{
 		api.POST("/shorten", a.ShortURL)
+		api.POST("/shorten/batch", a.ShortenBatch)
 	}
 
 	return r
@@ -45,6 +46,8 @@ func main() {
 		}
 		storage.Get = s.Get
 		storage.Put = s.Put
+		storage.GetBatch = s.GetBatch
+		storage.PutBatch = s.PutBatch
 		defer s.Close()
 	} else {
 		s, err := store.NewStorage(initConfig.FileStoragePath)
