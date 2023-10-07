@@ -1,16 +1,20 @@
 package app
 
 import (
+	"database/sql"
 	"encoding/json"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/EvgeniyBudaev/shortener/internal/utils"
 	"github.com/gin-gonic/gin"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 )
+
+const driverName = "pgx"
 
 type (
 	App struct {
@@ -114,4 +118,14 @@ func (a *App) ShortURL(c *gin.Context) {
 			return
 		}
 	}
+}
+
+func (a *App) DBPingCheck(c *gin.Context) {
+	db, err := sql.Open(driverName, a.config.DatabaseDSN)
+	if err != nil {
+		c.Writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+	c.Writer.WriteHeader(http.StatusOK)
 }

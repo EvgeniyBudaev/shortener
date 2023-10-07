@@ -26,3 +26,6 @@ Protocol Buffers
 Protocol Buffers (Protobuf) — это популярный в индустрии формат бинарного представления данных от компании Google.
 Особенность протокола — наличие proto-файлов, которые описывают сериализуемые типы в своём формате (proto3).
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+PostgreSQL
+go get -u github.com/jackc/pgx/v5

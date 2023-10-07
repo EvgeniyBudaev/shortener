@@ -1,13 +1,13 @@
 package main
 
 import (
+	"github.com/EvgeniyBudaev/shortener/internal/compress"
 	"log"
 
 	"github.com/EvgeniyBudaev/shortener/internal/app"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
-	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,10 +18,11 @@ func setupRouter(a *app.App) *gin.Engine {
 		log.Fatal(err)
 	}
 	r.Use(ginLoggerMiddleware)
-	r.Use(gzip.Gzip(gzip.BestCompression, gzip.WithDecompressFn(gzip.DefaultDecompressHandle)))
+	r.Use(compress.Compress())
 
 	r.GET("/:id", a.RedirectURL)
 	r.POST("/", a.ShortURL)
+	r.GET("/ping", a.DBPingCheck)
 
 	api := r.Group("/api")
 	{
