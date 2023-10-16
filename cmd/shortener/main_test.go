@@ -53,6 +53,7 @@ func TestRedirectURL(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
@@ -63,7 +64,7 @@ func TestRedirectURL(t *testing.T) {
 			}
 			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
-				storage.Put(url, test.args.urls[url])
+				storage.Put(ctx, url, test.args.urls[url])
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
@@ -113,6 +114,7 @@ func TestShortURLV1(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
@@ -123,7 +125,7 @@ func TestShortURLV1(t *testing.T) {
 			}
 			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
-				storage.Put(url, test.args.urls[url])
+				storage.Put(ctx, url, test.args.urls[url])
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
@@ -172,6 +174,7 @@ func TestShortURLV2(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
@@ -182,7 +185,7 @@ func TestShortURLV2(t *testing.T) {
 			}
 			defer storage.DeleteStorageFile()
 			for url := range tt.args.urls {
-				storage.Put(url, tt.args.urls[url])
+				storage.Put(ctx, url, tt.args.urls[url])
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
