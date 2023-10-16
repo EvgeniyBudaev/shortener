@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -32,8 +33,8 @@ func (db *DBStore) Ping() error {
 	return db.conn.Ping(context.Background())
 }
 
-func (db *DBStore) Get(id string) (string, error) {
-	row := db.conn.QueryRow(context.Background(), "SELECT original_url FROM shortener WHERE slug = $1", id)
+func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
+	row := db.conn.QueryRow(ctx, "SELECT original_url FROM shortener WHERE slug = $1", id)
 	var result string
 	err := row.Scan(&result)
 	if err != nil {
@@ -42,10 +43,10 @@ func (db *DBStore) Get(id string) (string, error) {
 	return result, nil
 }
 
-func (db *DBStore) Put(id string, url string) (string, error) {
+func (db *DBStore) Put(ctx *gin.Context, id string, url string) (string, error) {
 	var err error
 
-	row := db.conn.QueryRow(context.Background(), `
+	row := db.conn.QueryRow(ctx, `
 		INSERT INTO shortener VALUES ($1, $2)
 		ON CONFLICT (original_url)
 		DO UPDATE SET
@@ -64,7 +65,7 @@ func (db *DBStore) Put(id string, url string) (string, error) {
 	return result, err
 }
 
-func (db *DBStore) PutBatch(urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
+func (db *DBStore) PutBatch(ctx *gin.Context, urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
 	query := `
 		INSERT INTO shortener VALUES (@slug, @originalUrl)
 		ON CONFLICT (original_url)
@@ -82,7 +83,7 @@ func (db *DBStore) PutBatch(urls []models.URLBatchReq) ([]models.URLBatchRes, er
 		}
 		batch.Queue(query, args)
 	}
-	results := db.conn.SendBatch(context.Background(), batch)
+	results := db.conn.SendBatch(ctx, batch)
 	defer results.Close()
 
 	for _, url := range urls {

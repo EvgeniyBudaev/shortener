@@ -2,6 +2,7 @@ package memory
 
 import (
 	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/gin-gonic/gin"
 	"sync"
 )
 
@@ -19,7 +20,7 @@ func NewMemoryStorage(records map[string]string) (*MemoryStorage, error) {
 	}, nil
 }
 
-func (s *MemoryStorage) Put(id string, url string) (string, error) {
+func (s *MemoryStorage) Put(ctx *gin.Context, id string, url string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.urls[id] = url
@@ -27,18 +28,18 @@ func (s *MemoryStorage) Put(id string, url string) (string, error) {
 	return id, nil
 }
 
-func (s *MemoryStorage) Get(id string) (string, error) {
+func (s *MemoryStorage) Get(ctx *gin.Context, id string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	originalURL := s.urls[id]
 	return originalURL, nil
 }
 
-func (s *MemoryStorage) PutBatch(urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
+func (s *MemoryStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(url.CorrelationID, url.OriginalURL)
+		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL)
 		if err != nil {
 			return nil, err
 		}

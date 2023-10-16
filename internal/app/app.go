@@ -16,9 +16,9 @@ import (
 )
 
 type Store interface {
-	Get(id string) (string, error)
-	Put(id string, shortURL string) (string, error)
-	PutBatch([]models.URLBatchReq) ([]models.URLBatchRes, error)
+	Get(ctx *gin.Context, id string) (string, error)
+	Put(ctx *gin.Context, id string, shortURL string) (string, error)
+	PutBatch(*gin.Context, []models.URLBatchReq) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
@@ -38,7 +38,7 @@ func (a *App) RedirectURL(c *gin.Context) {
 	res := c.Writer
 	id := c.Param("id")
 
-	originalURL, err := a.store.Get(id)
+	originalURL, err := a.store.Get(c, id)
 	if err != nil {
 		log.Printf("Error getting original URL: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
@@ -65,7 +65,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 		return
 	}
 
-	result, err := a.store.PutBatch(batch)
+	result, err := a.store.PutBatch(c, batch)
 	if err != nil {
 		log.Printf("Cant put batch: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
@@ -123,7 +123,7 @@ func (a *App) ShortURL(c *gin.Context) {
 		return
 	}
 
-	id, err = a.store.Put(id, originalURL)
+	id, err = a.store.Put(c, id, originalURL)
 	if err != nil {
 		if errors.Is(err, postgres.ErrDBInsertConflict) {
 			res.WriteHeader(http.StatusConflict)

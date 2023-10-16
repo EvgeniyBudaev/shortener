@@ -6,12 +6,13 @@ import (
 	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
 	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
 	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
+	"github.com/gin-gonic/gin"
 )
 
 type Store interface {
-	Get(id string) (string, error)
-	Put(id string, shortURL string) (string, error)
-	PutBatch([]models.URLBatchReq) ([]models.URLBatchRes, error)
+	Get(ctx *gin.Context, id string) (string, error)
+	Put(ctx *gin.Context, id string, shortURL string) (string, error)
+	PutBatch(*gin.Context, []models.URLBatchReq) ([]models.URLBatchRes, error)
 	Ping() error
 }
 

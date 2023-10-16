@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
+	"github.com/gin-gonic/gin"
 	"io"
 	"os"
 	"strconv"
@@ -46,11 +47,11 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 	}, nil
 }
 
-func (s *FSStorage) PutBatch(urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
+func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(url.CorrelationID, url.OriginalURL)
+		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +95,8 @@ func (sr *StorageReader) ReadFromFile() (map[string]string, error) {
 		r, err := sr.ReadLine()
 		if errors.Is(err, io.EOF) {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			return nil, err
 		}
 		records[r.ShortURL] = r.OriginalURL
@@ -133,8 +135,8 @@ func (sw *StorageWriter) AppendToFile(r *models.URLRecord) error {
 	return sw.encoder.Encode(&r)
 }
 
-func (s *FSStorage) Put(id string, url string) (string, error) {
-	id, err := s.MemoryStorage.Put(id, url)
+func (s *FSStorage) Put(ctx *gin.Context, id string, url string) (string, error) {
+	id, err := s.MemoryStorage.Put(ctx, id, url)
 	if (err) != nil {
 		return "", err
 	}
