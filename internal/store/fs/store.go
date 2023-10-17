@@ -143,7 +143,6 @@ func (s *FSStorage) Put(ctx *gin.Context, id string, url string) (string, error)
 		return "", err
 	}
 	s.countMutex.Lock()
-	s.UrlsCount++
 	currentCount := s.UrlsCount
 	s.countMutex.Unlock()
 	return id, s.sw.AppendToFile(&models.URLRecord{UUID: strconv.Itoa(currentCount), OriginalURL: url, ShortURL: id})
