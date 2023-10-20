@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/compress"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"log"
@@ -17,8 +18,9 @@ func setupRouter(a *app.App) *gin.Engine {
 	if err != nil {
 		log.Fatal(err)
 	}
-	r.Use(ginLoggerMiddleware)
 	r.Use(compress.Compress())
+	r.Use(ginLoggerMiddleware)
+	r.Use(auth.AuthMiddleware())
 
 	r.GET("/:id", a.RedirectURL)
 	r.POST("/", a.ShortURL)
@@ -28,6 +30,7 @@ func setupRouter(a *app.App) *gin.Engine {
 	{
 		api.POST("/shorten", a.ShortURL)
 		api.POST("/shorten/batch", a.ShortenBatch)
+		api.GET("/user/urls", a.GetUserRecors)
 	}
 
 	return r

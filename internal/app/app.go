@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
@@ -17,8 +18,9 @@ import (
 
 type Store interface {
 	Get(ctx *gin.Context, id string) (string, error)
-	Put(ctx *gin.Context, id string, shortURL string) (string, error)
-	PutBatch(*gin.Context, []models.URLBatchReq) ([]models.URLBatchRes, error)
+	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
+	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
+	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
@@ -31,6 +33,41 @@ func NewApp(config *config.ServerConfig, store Store) *App {
 	return &App{
 		config: config,
 		store:  store,
+	}
+}
+
+func (a *App) GetUserRecors(c *gin.Context) {
+	res := c.Writer
+	userID := c.GetString(auth.UserIDKey)
+
+	records, err := a.store.GetAllByUserID(c, userID)
+	if err != nil {
+		log.Printf("Error getting all user urls: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if len(records) == 0 {
+		res.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	for idx, urlObj := range records {
+		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.ShortURL)
+		if err != nil {
+			log.Printf("URL cannot be joined: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		records[idx].ShortURL = resultURL
+	}
+
+	res.Header().Add("Content-Type", "application/json")
+	res.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(res).Encode(records); err != nil {
+		log.Printf("Error writing response in JSON: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -57,6 +94,7 @@ func (a *App) RedirectURL(c *gin.Context) {
 func (a *App) ShortenBatch(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
+	userID := c.GetString(auth.UserIDKey)
 
 	batch := make([]models.URLBatchReq, 0)
 	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
@@ -65,7 +103,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 		return
 	}
 
-	result, err := a.store.PutBatch(c, batch)
+	result, err := a.store.PutBatch(c, batch, userID)
 	if err != nil {
 		log.Printf("Cant put batch: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
@@ -94,6 +132,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 func (a *App) ShortURL(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
+	userID := c.GetString(auth.UserIDKey)
 
 	var originalURL string
 
@@ -123,7 +162,7 @@ func (a *App) ShortURL(c *gin.Context) {
 		return
 	}
 
-	id, err = a.store.Put(c, id, originalURL)
+	id, err = a.store.Put(c, id, originalURL, userID)
 	if err != nil {
 		if errors.Is(err, postgres.ErrDBInsertConflict) {
 			res.WriteHeader(http.StatusConflict)

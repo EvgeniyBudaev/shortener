@@ -49,11 +49,11 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 	}, nil
 }
 
-func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq) ([]models.URLBatchRes, error) {
+func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL)
+		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -107,8 +107,8 @@ func (sr *StorageReader) ReadFromFile() (map[string]string, error) {
 	return records, nil
 }
 
-func (sr *StorageReader) ReadLine() (*models.URLRecord, error) {
-	r := models.URLRecord{}
+func (sr *StorageReader) ReadLine() (*models.URLRecordFS, error) {
+	r := models.URLRecordFS{}
 	if err := sr.decoder.Decode(&r); err != nil {
 		return nil, err
 	}
@@ -133,17 +133,19 @@ func NewStorageWriter(filename string) (*StorageWriter, error) {
 	}, nil
 }
 
-func (sw *StorageWriter) AppendToFile(r *models.URLRecord) error {
+func (sw *StorageWriter) AppendToFile(r *models.URLRecordFS) error {
 	return sw.encoder.Encode(&r)
 }
 
-func (s *FSStorage) Put(ctx *gin.Context, id string, url string) (string, error) {
-	id, err := s.MemoryStorage.Put(ctx, id, url)
+func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+	id, err := s.MemoryStorage.Put(ctx, id, url, userID)
 	if (err) != nil {
 		return "", err
 	}
 	s.countMutex.Lock()
 	currentCount := s.UrlsCount
 	s.countMutex.Unlock()
-	return id, s.sw.AppendToFile(&models.URLRecord{UUID: strconv.Itoa(currentCount), OriginalURL: url, ShortURL: id})
+	return id, s.sw.AppendToFile(&models.URLRecordFS{UUID: strconv.Itoa(currentCount), URLRecord: models.URLRecord{
+		OriginalURL: url, ShortURL: id,
+	}})
 }

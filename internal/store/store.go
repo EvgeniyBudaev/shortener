@@ -11,8 +11,9 @@ import (
 
 type Store interface {
 	Get(ctx *gin.Context, id string) (string, error)
-	Put(ctx *gin.Context, id string, shortURL string) (string, error)
-	PutBatch(*gin.Context, []models.URLBatchReq) ([]models.URLBatchRes, error)
+	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
+	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
+	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 

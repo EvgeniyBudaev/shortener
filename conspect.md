@@ -31,3 +31,9 @@ PostgreSQL
 go get -u github.com/jackc/pgx/v5
 
 go get -u github.com/jackc/pgerrcode
+
+JWT
+go get -u github.com/golang-jwt/jwt/v4
+
+UUID
+go get -u github.com/google/uuid
