@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/EvgeniyBudaev/shortener/internal/config"
-	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,17 +53,18 @@ func TestRedirectURL(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			storage, err := store.NewStorage("./test.json")
+			storage, err := fs.NewFileStorage("./test.json")
 			if err != nil {
 				t.Errorf("failed to initialize a new storage: %v", err)
 				return
 			}
 			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
-				storage.Put(url, test.args.urls[url])
+				storage.Put(ctx, url, test.args.urls[url])
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
@@ -112,17 +114,18 @@ func TestShortURLV1(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			storage, err := store.NewStorage("./test.json")
+			storage, err := fs.NewFileStorage("./test.json")
 			if err != nil {
 				t.Errorf("failed to initialize a new storage: %v", err)
 				return
 			}
 			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
-				storage.Put(url, test.args.urls[url])
+				storage.Put(ctx, url, test.args.urls[url])
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
@@ -171,22 +174,23 @@ func TestShortURLV2(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
-			storage, err := store.NewStorage("./test.json")
+			storage, err := fs.NewFileStorage("./test.json")
 			if err != nil {
 				t.Errorf("failed to initialize a new storage: %v", err)
 				return
 			}
 			defer storage.DeleteStorageFile()
 			for url := range tt.args.urls {
-				storage.Put(url, tt.args.urls[url])
+				storage.Put(ctx, url, tt.args.urls[url])
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
 			r := setupRouter(testApp)
-			reqObj := app.ShortenReq{
+			reqObj := models.ShortenReq{
 				URL: tt.args.originalURL,
 			}
 			obj, err := json.Marshal(reqObj)
