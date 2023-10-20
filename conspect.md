@@ -29,3 +29,5 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 PostgreSQL
 go get -u github.com/jackc/pgx/v5
+
+go get -u github.com/jackc/pgerrcode
