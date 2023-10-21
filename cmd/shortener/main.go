@@ -43,6 +43,7 @@ func setupRouter(a *app.App) *gin.Engine {
 	{
 		api.POST("/shorten", a.ShortURL)
 		api.POST("/shorten/batch", a.ShortenBatch)
+
 		api.GET("/user/urls", a.GetUserRecords)
 		api.DELETE("/user/urls", a.DeleteUserRecords)
 	}
@@ -54,7 +55,7 @@ func main() {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancelCtx()
 
-	initConfig, err := config.InitFlags()
+	initConfig, err := config.ParseFlags()
 	if err != nil {
 		log.Fatal(err)
 	}

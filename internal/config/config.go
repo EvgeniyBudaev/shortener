@@ -16,7 +16,7 @@ type ServerConfig struct {
 
 var serverConfig ServerConfig
 
-func InitFlags() (*ServerConfig, error) {
+func ParseFlags() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.FlagRunAddr, "a", ":8080", "address and port to run server")
 	flag.StringVar(&serverConfig.RedirectBaseURL, "b", "http://localhost:8080", "server URI prefix")
 	flag.StringVar(&serverConfig.FileStoragePath, "f", "", "file storage path")

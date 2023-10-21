@@ -1,5 +1,0 @@
-BEGIN TRANSACTION;
-
-DROP TABLE shortener;
-
-COMMIT;
