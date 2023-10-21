@@ -3,21 +3,21 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/gin-gonic/gin"
-	"github.com/rawen554/shortener/internal/app"
-	"github.com/rawen554/shortener/internal/config"
-	"github.com/rawen554/shortener/internal/models"
-	"github.com/rawen554/shortener/internal/store/fs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func Test_redirectToOriginal(t *testing.T) {
+func TestRedirectURL(t *testing.T) {
 	type args struct {
 		urls           map[string]string
 		shortURL       string
@@ -32,9 +32,9 @@ func Test_redirectToOriginal(t *testing.T) {
 			name: "simple redirect",
 			args: args{
 				urls: map[string]string{
-					"1": "http://ya.ru",
+					"1": "http://test.ru",
 				},
-				originalURL:    "http://ya.ru",
+				originalURL:    "http://test.ru",
 				shortURL:       "/1",
 				shouldRedirect: true,
 			},
@@ -43,17 +43,17 @@ func Test_redirectToOriginal(t *testing.T) {
 			name: "error short url not found",
 			args: args{
 				urls: map[string]string{
-					"1": "http://ya.ru",
+					"1": "http://test.ru",
 				},
-				originalURL:    "http://ya.ru",
+				originalURL:    "http://test.ru",
 				shortURL:       "/2",
 				shouldRedirect: false,
 			},
 		},
 	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
@@ -63,22 +63,21 @@ func Test_redirectToOriginal(t *testing.T) {
 				return
 			}
 			defer storage.DeleteStorageFile()
-
-			for url := range tt.args.urls {
-				storage.Put(url, tt.args.urls[url], "")
+			for url := range test.args.urls {
+				storage.Put(ctx, url, test.args.urls[url], "")
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
 			r := setupRouter(testApp)
-			req := httptest.NewRequest(http.MethodGet, tt.args.shortURL, nil)
+			req := httptest.NewRequest(http.MethodGet, test.args.shortURL, nil)
 
 			r.ServeHTTP(w, req)
 
 			res := w.Result()
 			defer res.Body.Close()
 
-			if tt.args.shouldRedirect {
-				assert.Equal(t, tt.args.originalURL, res.Header.Get("Location"))
+			if test.args.shouldRedirect {
+				assert.Equal(t, test.args.originalURL, res.Header.Get("Location"))
 				assert.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
 			} else {
 				assert.Equal(t, http.StatusNotFound, res.StatusCode)
@@ -87,7 +86,7 @@ func Test_redirectToOriginal(t *testing.T) {
 	}
 }
 
-func Test_shortURL_V1(t *testing.T) {
+func TestShortURLV1(t *testing.T) {
 	type args struct {
 		urls        map[string]string
 		originalURL string
@@ -100,22 +99,22 @@ func Test_shortURL_V1(t *testing.T) {
 			name: "add new url to empty map",
 			args: args{
 				urls:        make(map[string]string),
-				originalURL: "https://ya.ru",
+				originalURL: "https://test.ru",
 			},
 		},
 		{
 			name: "add new url to map",
 			args: args{
 				urls: map[string]string{
-					"abc": "https://ya.com",
+					"abc": "https://test.com",
 				},
-				originalURL: "https://ya.ru",
+				originalURL: "https://test.ru",
 			},
 		},
 	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
@@ -125,14 +124,13 @@ func Test_shortURL_V1(t *testing.T) {
 				return
 			}
 			defer storage.DeleteStorageFile()
-
-			for url := range tt.args.urls {
-				storage.Put(url, tt.args.urls[url], "")
+			for url := range test.args.urls {
+				storage.Put(ctx, url, test.args.urls[url], "")
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
 			r := setupRouter(testApp)
-			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(tt.args.originalURL)))
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
 			req.Header.Add("Content-Type", "text/plain")
 
 			r.ServeHTTP(w, req)
@@ -147,7 +145,7 @@ func Test_shortURL_V1(t *testing.T) {
 	}
 }
 
-func Test_shortURL_V2(t *testing.T) {
+func TestShortURLV2(t *testing.T) {
 	type args struct {
 		urls        map[string]string
 		originalURL string
@@ -160,22 +158,23 @@ func Test_shortURL_V2(t *testing.T) {
 			name: "add new url to empty map",
 			args: args{
 				urls:        make(map[string]string),
-				originalURL: "https://ya.ru",
+				originalURL: "https://test.ru",
 			},
 		},
 		{
 			name: "add new url to map",
 			args: args{
 				urls: map[string]string{
-					"abc": "https://ya.com",
+					"abc": "https://test.com",
 				},
-				originalURL: "https://ya.ru",
+				originalURL: "https://test.ru",
 			},
 		},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			gin.SetMode(gin.TestMode)
 			w := httptest.NewRecorder()
 
@@ -185,9 +184,8 @@ func Test_shortURL_V2(t *testing.T) {
 				return
 			}
 			defer storage.DeleteStorageFile()
-
 			for url := range tt.args.urls {
-				storage.Put(url, tt.args.urls[url], "")
+				storage.Put(ctx, url, tt.args.urls[url], "")
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)

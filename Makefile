@@ -7,7 +7,7 @@ pg:
 		--name=shortener-db \
 		-v $(abspath ./db/init/):/docker-entrypoint-initdb.d \
 		-v $(abspath ./db/data/):/var/lib/postgresql/data \
-		-e POSTGRES_PASSWORD="P@ssw0rd" \
+		-e POSTGRES_PASSWORD="root" \
 		-d \
 		-p 5432:5432 \
 		postgres:15.3

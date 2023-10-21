@@ -5,25 +5,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
+	"github.com/EvgeniyBudaev/shortener/internal/config"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
+	"github.com/gin-gonic/gin"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-
-	"github.com/gin-gonic/gin"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/rawen554/shortener/internal/auth"
-	"github.com/rawen554/shortener/internal/config"
-	"github.com/rawen554/shortener/internal/models"
-	"github.com/rawen554/shortener/internal/store/postgres"
 )
 
 type Store interface {
-	Get(id string) (string, error)
-	GetAllByUserID(userID string) ([]models.URLRecord, error)
-	DeleteMany(ids models.DeleteUserURLsReq, userID string) error
-	Put(id string, shortURL string, userID string) (string, error)
-	PutBatch(data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
+	Get(ctx *gin.Context, id string) (string, error)
+	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
+	DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error
+	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
+	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
@@ -52,7 +51,7 @@ func (a *App) DeleteUserRecords(c *gin.Context) {
 	}
 
 	go func() {
-		err := a.store.DeleteMany(batch, userID)
+		err := a.store.DeleteMany(c, batch, userID)
 		if err != nil {
 			log.Printf("error deleting: %v", err)
 		}
@@ -65,7 +64,7 @@ func (a *App) GetUserRecords(c *gin.Context) {
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
 
-	records, err := a.store.GetAllByUserID(userID)
+	records, err := a.store.GetAllByUserID(c, userID)
 	if err != nil {
 		log.Printf("Error getting all user urls: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
@@ -96,11 +95,11 @@ func (a *App) GetUserRecords(c *gin.Context) {
 	}
 }
 
-func (a *App) RedirectToOriginal(c *gin.Context) {
+func (a *App) RedirectURL(c *gin.Context) {
 	res := c.Writer
 	id := c.Param("id")
 
-	originalURL, err := a.store.Get(id)
+	originalURL, err := a.store.Get(c, id)
 	if err != nil {
 		if errors.Is(err, postgres.ErrURLDeleted) {
 			res.WriteHeader(http.StatusGone)
@@ -133,7 +132,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 		return
 	}
 
-	result, err := a.store.PutBatch(batch, userID)
+	result, err := a.store.PutBatch(c, batch, userID)
 	if err != nil {
 		log.Printf("Cant put batch: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
@@ -159,7 +158,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 	}
 }
 
-func (a *App) ShortenURL(c *gin.Context) {
+func (a *App) ShortURL(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
@@ -194,7 +193,7 @@ func (a *App) ShortenURL(c *gin.Context) {
 	}
 	id := hex.EncodeToString(b)
 
-	id, err = a.store.Put(id, originalURL, userID)
+	id, err = a.store.Put(c, id, originalURL, userID)
 	if err != nil {
 		if errors.Is(err, postgres.ErrDBInsertConflict) {
 			res.WriteHeader(http.StatusConflict)

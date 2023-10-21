@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
+	"github.com/EvgeniyBudaev/shortener/internal/compress"
+	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"log"
 	"net/http"
 	"os"
@@ -11,13 +14,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/config"
+	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
 	"github.com/gin-gonic/gin"
-	"github.com/rawen554/shortener/internal/app"
-	"github.com/rawen554/shortener/internal/auth"
-	"github.com/rawen554/shortener/internal/compress"
-	"github.com/rawen554/shortener/internal/config"
-	ginLogger "github.com/rawen554/shortener/internal/logger"
-	"github.com/rawen554/shortener/internal/store"
 )
 
 const (
@@ -35,15 +35,14 @@ func setupRouter(a *app.App) *gin.Engine {
 	r.Use(auth.AuthMiddleware(a.Config.Seed))
 	r.Use(compress.Compress())
 
-	r.GET("/:id", a.RedirectToOriginal)
-	r.POST("/", a.ShortenURL)
+	r.GET("/:id", a.RedirectURL)
+	r.POST("/", a.ShortURL)
 	r.GET("/ping", a.Ping)
 
 	api := r.Group("/api")
 	{
-		api.POST("/shorten", a.ShortenURL)
+		api.POST("/shorten", a.ShortURL)
 		api.POST("/shorten/batch", a.ShortenBatch)
-
 		api.GET("/user/urls", a.GetUserRecords)
 		api.DELETE("/user/urls", a.DeleteUserRecords)
 	}
@@ -55,12 +54,12 @@ func main() {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancelCtx()
 
-	config, err := config.ParseFlags()
+	initConfig, err := config.InitFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	storage, err := store.NewStore(ctx, config)
+	storage, err := store.NewStore(ctx, initConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -81,11 +80,11 @@ func main() {
 
 	componentsErrs := make(chan error, 1)
 
-	app := app.NewApp(config, storage)
+	appInit := app.NewApp(initConfig, storage)
 
-	r := setupRouter(app)
+	r := setupRouter(appInit)
 	srv := http.Server{
-		Addr:    config.FlagRunAddr,
+		Addr:    initConfig.FlagRunAddr,
 		Handler: r,
 	}
 

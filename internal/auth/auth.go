@@ -36,7 +36,6 @@ func BuildJWTString(seed string) (string, error) {
 		return "", err
 	}
 
-	// возвращаем строку токена
 	return tokenString, nil
 }
 

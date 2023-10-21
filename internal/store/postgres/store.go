@@ -5,16 +5,18 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"log"
-	"runtime"
-
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rawen554/shortener/internal/models"
+	"log"
+	"runtime"
 )
+
+var migrationsDir embed.FS
 
 type DBStore struct {
 	conn *pgxpool.Pool
@@ -27,25 +29,18 @@ func NewPostgresStore(ctx context.Context, dsn string) (*DBStore, error) {
 	if err := runMigrations(dsn); err != nil {
 		return nil, fmt.Errorf("failed to run DB migrations: %w", err)
 	}
-
 	conf, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-
 	conf.MaxConns = int32(runtime.NumCPU() * 4)
-
 	conn, err := pgxpool.NewWithConfig(ctx, conf)
 	if err != nil {
 		return nil, err
 	}
 	dbStore := &DBStore{conn: conn}
-
 	return dbStore, nil
 }
-
-//go:embed migrations/*.sql
-var migrationsDir embed.FS
 
 func runMigrations(dsn string) error {
 	d, err := iofs.New(migrationsDir, "migrations")
@@ -73,26 +68,25 @@ func (db *DBStore) Close() {
 	db.conn.Close()
 }
 
-func (db *DBStore) Get(id string) (string, error) {
-	row := db.conn.QueryRow(context.Background(), "SELECT original_url, deleted_flag FROM shortener WHERE slug = $1", id)
+func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
+	row := db.conn.QueryRow(context.Background(),
+		"SELECT original_url, deleted_flag FROM shortener WHERE slug = $1", id)
 	var result string
 	var deleted bool
 	err := row.Scan(&result, &deleted)
 	if err != nil {
 		return "", err
 	}
-
 	if deleted {
 		return "", ErrURLDeleted
 	}
-
 	return result, nil
 }
 
-func (db *DBStore) GetAllByUserID(userID string) ([]models.URLRecord, error) {
+func (db *DBStore) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
 	result := make([]models.URLRecord, 0)
 
-	rows, err := db.conn.Query(context.Background(), `
+	rows, err := db.conn.Query(ctx, `
 		SELECT slug, original_url
 		FROM shortener
 		WHERE user_id = $1 AND deleted_flag = FALSE
@@ -114,9 +108,7 @@ func (db *DBStore) GetAllByUserID(userID string) ([]models.URLRecord, error) {
 	return result, nil
 }
 
-func (db *DBStore) DeleteMany(ids models.DeleteUserURLsReq, userID string) error {
-	ctx := context.Background()
-
+func (db *DBStore) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error {
 	query := `
 		UPDATE shortener SET deleted_flag = TRUE
 		WHERE shortener.slug = $1 AND shortener.user_id = $2`
@@ -138,10 +130,10 @@ func (db *DBStore) DeleteMany(ids models.DeleteUserURLsReq, userID string) error
 	return nil
 }
 
-func (db *DBStore) Put(id string, url string, userID string) (string, error) {
+func (db *DBStore) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
 	var err error
 
-	row := db.conn.QueryRow(context.Background(), `
+	row := db.conn.QueryRow(ctx, `
 		INSERT INTO shortener VALUES ($1, $2, $3)
 		ON CONFLICT (original_url)
 		DO UPDATE SET
@@ -160,13 +152,13 @@ func (db *DBStore) Put(id string, url string, userID string) (string, error) {
 	return result, err
 }
 
-func (db *DBStore) PutBatch(urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (db *DBStore) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	query := `
 		INSERT INTO shortener VALUES (@slug, @originalUrl, @userID)
 		ON CONFLICT (original_url)
 		DO UPDATE SET
 			original_url=EXCLUDED.original_url
-		RETURNING slug
+		RETURNING slug	
 	`
 	result := make([]models.URLBatchRes, 0)
 
@@ -179,7 +171,7 @@ func (db *DBStore) PutBatch(urls []models.URLBatchReq, userID string) ([]models.
 		}
 		batch.Queue(query, args)
 	}
-	results := db.conn.SendBatch(context.Background(), batch)
+	results := db.conn.SendBatch(ctx, batch)
 	defer results.Close()
 
 	for _, url := range urls {

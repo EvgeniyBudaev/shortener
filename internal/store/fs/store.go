@@ -3,16 +3,18 @@ package fs
 import (
 	"encoding/json"
 	"errors"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
+	"github.com/gin-gonic/gin"
 	"io"
 	"os"
 	"strconv"
-
-	"github.com/rawen554/shortener/internal/models"
-	"github.com/rawen554/shortener/internal/store/memory"
+	"sync"
 )
 
 type FSStorage struct {
-	path string
+	countMutex sync.Mutex
+	path       string
 	*memory.MemoryStorage
 	sr *StorageReader
 	sw *StorageWriter
@@ -47,11 +49,11 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 	}, nil
 }
 
-func (s *FSStorage) PutBatch(urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(url.CorrelationID, url.OriginalURL, userID)
+		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +101,8 @@ func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, erro
 		r, err := sr.ReadLine()
 		if errors.Is(err, io.EOF) {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			return nil, err
 		}
 		records[r.ShortURL] = models.URLRecordMemory{OriginalURL: r.OriginalURL, UserID: r.UserID}
@@ -138,12 +141,16 @@ func (sw *StorageWriter) AppendToFile(r *models.URLRecordFS) error {
 	return sw.encoder.Encode(&r)
 }
 
-func (s *FSStorage) Put(id string, url string, userID string) (string, error) {
-	id, err := s.MemoryStorage.Put(id, url, userID)
+func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+	id, err := s.MemoryStorage.Put(ctx, id, url, userID)
 	if err != nil {
 		return "", err
 	}
-	return id, s.sw.AppendToFile(&models.URLRecordFS{UUID: strconv.Itoa(s.UrlsCount), UserID: userID, URLRecord: models.URLRecord{
-		OriginalURL: url, ShortURL: id,
-	}})
+	s.countMutex.Lock()
+	currentCount := s.UrlsCount
+	s.countMutex.Unlock()
+	return id, s.sw.AppendToFile(
+		&models.URLRecordFS{UUID: strconv.Itoa(currentCount), UserID: userID, URLRecord: models.URLRecord{
+			OriginalURL: url, ShortURL: id,
+		}})
 }
