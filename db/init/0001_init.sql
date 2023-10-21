@@ -1,5 +1,5 @@
 CREATE USER shortener
-    PASSWORD 'root';
+    PASSWORD 'P@ssw0rd';
 
 CREATE DATABASE shortener
     OWNER 'shortener'
