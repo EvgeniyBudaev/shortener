@@ -1,13 +1,14 @@
 package app
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
-	"github.com/EvgeniyBudaev/shortener/internal/utils"
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"io"
@@ -19,24 +20,47 @@ import (
 type Store interface {
 	Get(ctx *gin.Context, id string) (string, error)
 	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
+	DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error
 	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
 	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
 type App struct {
-	config *config.ServerConfig
+	Config *config.ServerConfig
 	store  Store
 }
 
 func NewApp(config *config.ServerConfig, store Store) *App {
 	return &App{
-		config: config,
+		Config: config,
 		store:  store,
 	}
 }
 
-func (a *App) GetUserRecors(c *gin.Context) {
+func (a *App) DeleteUserRecords(c *gin.Context) {
+	req := c.Request
+	res := c.Writer
+	userID := c.GetString(auth.UserIDKey)
+
+	batch := make(models.DeleteUserURLsReq, 0)
+	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
+		log.Printf("Body cannot be decoded: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	go func() {
+		err := a.store.DeleteMany(c, batch, userID)
+		if err != nil {
+			log.Printf("error deleting: %v", err)
+		}
+	}()
+
+	res.WriteHeader(http.StatusAccepted)
+}
+
+func (a *App) GetUserRecords(c *gin.Context) {
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
 
@@ -53,7 +77,7 @@ func (a *App) GetUserRecors(c *gin.Context) {
 	}
 
 	for idx, urlObj := range records {
-		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.ShortURL)
+		resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, urlObj.ShortURL)
 		if err != nil {
 			log.Printf("URL cannot be joined: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
@@ -77,9 +101,14 @@ func (a *App) RedirectURL(c *gin.Context) {
 
 	originalURL, err := a.store.Get(c, id)
 	if err != nil {
-		log.Printf("Error getting original URL: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
+		if errors.Is(err, postgres.ErrURLDeleted) {
+			res.WriteHeader(http.StatusGone)
+			return
+		} else {
+			log.Printf("Error getting original URL: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if originalURL == "" {
@@ -111,7 +140,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 	}
 
 	for idx, urlObj := range result {
-		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.CorrelationID)
+		resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, urlObj.CorrelationID)
 		if err != nil {
 			log.Printf("URL cannot be joined: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
@@ -155,12 +184,14 @@ func (a *App) ShortURL(c *gin.Context) {
 		originalURL = string(body)
 	}
 
-	id, err := utils.GenerateRandomString(8)
+	b := make([]byte, 4)
+	_, err := rand.Read(b)
 	if err != nil {
 		log.Printf("Random string generator error: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	id := hex.EncodeToString(b)
 
 	id, err = a.store.Put(c, id, originalURL, userID)
 	if err != nil {
@@ -175,7 +206,7 @@ func (a *App) ShortURL(c *gin.Context) {
 		res.WriteHeader(http.StatusCreated)
 	}
 
-	resultURL, err := url.JoinPath(a.config.RedirectBaseURL, id)
+	resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, id)
 	if err != nil {
 		log.Printf("URL cannot be joined: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)

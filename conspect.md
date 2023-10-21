@@ -29,11 +29,14 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 PostgreSQL
 go get -u github.com/jackc/pgx/v5
-
 go get -u github.com/jackc/pgerrcode
+go get -u github.com/golang-migrate/migrate/v4
 
 JWT
 go get -u github.com/golang-jwt/jwt/v4
 
 UUID
 go get -u github.com/google/uuid
+
+Random
+crypto/rand

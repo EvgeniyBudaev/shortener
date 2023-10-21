@@ -24,3 +24,7 @@ vendor/
 .vscode
 */**/.DS_Store
 short-url-db.json
+golangci-lint
+
+# Mounting volumes
+db/data
