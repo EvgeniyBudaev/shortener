@@ -28,6 +28,7 @@ Protocol Buffers (Protobuf) — это популярный в индустри�
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 PostgreSQL
+go get -u github.com/lib/pq
 go get -u github.com/jackc/pgx/v5
 go get -u github.com/jackc/pgerrcode
 go get -u github.com/golang-migrate/migrate/v4
