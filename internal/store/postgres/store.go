@@ -16,8 +16,6 @@ import (
 	"runtime"
 )
 
-var migrationsDir embed.FS
-
 type DBStore struct {
 	conn *pgxpool.Pool
 }
@@ -41,6 +39,9 @@ func NewPostgresStore(ctx context.Context, dsn string) (*DBStore, error) {
 	dbStore := &DBStore{conn: conn}
 	return dbStore, nil
 }
+
+//go:embed migrations/*.sql
+var migrationsDir embed.FS
 
 func runMigrations(dsn string) error {
 	d, err := iofs.New(migrationsDir, "migrations")
@@ -69,7 +70,7 @@ func (db *DBStore) Close() {
 }
 
 func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
-	row := db.conn.QueryRow(context.Background(),
+	row := db.conn.QueryRow(ctx,
 		"SELECT original_url, deleted_flag FROM shortener WHERE slug = $1", id)
 	var result string
 	var deleted bool
