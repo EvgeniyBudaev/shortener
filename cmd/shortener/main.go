@@ -70,15 +70,6 @@ func main() {
 		wg.Wait()
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer log.Print("closed DB")
-		defer wg.Done()
-		<-ctx.Done()
-
-		storage.Close()
-	}()
-
 	componentsErrs := make(chan error, 1)
 
 	appInit := app.NewApp(initConfig, storage)
@@ -100,7 +91,7 @@ func main() {
 
 	wg.Add(1)
 	go func() {
-		defer log.Print("server has been shutdown")
+		defer log.Print("server has been shutdown and close DB")
 		defer wg.Done()
 		<-ctx.Done()
 
@@ -109,6 +100,7 @@ func main() {
 		if err := srv.Shutdown(shutdownTimeoutCtx); err != nil {
 			log.Printf("an error occurred during server shutdown: %v", err)
 		}
+		storage.Close()
 	}()
 
 	select {
@@ -117,12 +109,4 @@ func main() {
 		log.Print(err)
 		cancelCtx()
 	}
-
-	go func() {
-		ctx, cancelCtx := context.WithTimeout(context.Background(), timeoutShutdown)
-		defer cancelCtx()
-
-		<-ctx.Done()
-		log.Fatal("failed to gracefully shutdown the service")
-	}()
 }
