@@ -15,6 +15,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
 )
 
 type Store interface {
@@ -50,14 +51,31 @@ func (a *App) DeleteUserRecords(c *gin.Context) {
 		return
 	}
 
-	go func() {
-		err := a.store.DeleteMany(c, batch, userID)
-		if err != nil {
-			log.Printf("error deleting: %v", err)
-		}
-	}()
+	go a.ExecDeleteUserRecords(c, batch, userID)
 
 	res.WriteHeader(http.StatusAccepted)
+}
+
+func (a *App) ExecDeleteUserRecords(c *gin.Context, batch models.DeleteUserURLsReq, userID string) {
+	var countJob = 5
+	jobCh := make(chan string, 1)
+	var wg sync.WaitGroup
+	for i := 0; i < countJob; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _ = range jobCh {
+				err := a.store.DeleteMany(c, batch, userID)
+				if err != nil {
+					log.Printf("error deleting: %v", err)
+				}
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(jobCh)
+	}()
 }
 
 func (a *App) GetUserRecords(c *gin.Context) {
