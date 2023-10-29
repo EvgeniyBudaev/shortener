@@ -42,26 +42,40 @@ func (a *App) DeleteUserRecords(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
-
 	batch := make(models.DeleteUserURLsReq, 0)
-	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
-		log.Printf("Body cannot be decoded: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 
 	deleteChan := make(chan models.DeleteUserURLsReq)
+	done := make(chan bool)
 
-	go func() {
+	deleteWorker := func() {
 		for batch := range deleteChan {
 			err := a.store.DeleteMany(c, batch, userID)
 			if err != nil {
 				log.Printf("error deleting: %v", err)
 			}
 		}
+		done <- true
+	}
+
+	go deleteWorker()
+
+	batchCh := make(chan models.DeleteUserURLsReq)
+	go func() {
+		if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
+			log.Printf("Body cannot be decoded: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		batchCh <- batch
+		close(batchCh)
 	}()
 
-	deleteChan <- batch
+	go func() {
+		for batch := range batchCh {
+			deleteChan <- batch
+		}
+		close(deleteChan)
+	}()
 
 	res.WriteHeader(http.StatusAccepted)
 }
