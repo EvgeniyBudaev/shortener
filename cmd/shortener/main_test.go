@@ -64,7 +64,7 @@ func TestRedirectURL(t *testing.T) {
 			}
 			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
-				storage.Put(ctx, url, test.args.urls[url])
+				storage.Put(ctx, url, test.args.urls[url], "")
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
@@ -125,7 +125,7 @@ func TestShortURLV1(t *testing.T) {
 			}
 			defer storage.DeleteStorageFile()
 			for url := range test.args.urls {
-				storage.Put(ctx, url, test.args.urls[url])
+				storage.Put(ctx, url, test.args.urls[url], "")
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
@@ -185,7 +185,7 @@ func TestShortURLV2(t *testing.T) {
 			}
 			defer storage.DeleteStorageFile()
 			for url := range tt.args.urls {
-				storage.Put(ctx, url, tt.args.urls[url])
+				storage.Put(ctx, url, tt.args.urls[url], "")
 			}
 
 			testApp := app.NewApp(&config.ServerConfig{}, storage)
