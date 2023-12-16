@@ -5,36 +5,56 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/EvgeniyBudaev/shortener/internal/auth"
-	"github.com/EvgeniyBudaev/shortener/internal/config"
-	"github.com/EvgeniyBudaev/shortener/internal/models"
-	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
-	"github.com/gin-gonic/gin"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/rawen554/shortener/internal/config"
+	"github.com/rawen554/shortener/internal/middleware/auth"
+	"github.com/rawen554/shortener/internal/models"
+	"github.com/rawen554/shortener/internal/store/postgres"
+	"go.uber.org/zap"
+)
+
+const (
+	slugLength      = 4
+	applicationJSON = "application/json"
+	textPlain       = "text/plain"
+	contentType     = "Content-Type"
+	location        = "Location"
+
+	rootPath       = "/"
+	pingPath       = "/ping"
+	apiShortenPath = "/api/shorten"
+
+	ErrorJoinURL     = "URL cannot be joined: %v"
+	ErrorDecodeBody  = "Body cannot be decoded: %v"
+	ErrorEncodeBody  = "Error writing response in JSON: %v"
+	ErrorWritingBody = "Error writing body: %v"
 )
 
 type Store interface {
-	Get(ctx *gin.Context, id string) (string, error)
-	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
-	DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error
-	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
-	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
+	Get(id string) (string, error)
+	GetAllByUserID(userID string) ([]models.URLRecord, error)
+	DeleteMany(ids models.DeleteUserURLsReq, userID string) error
+	Put(id string, shortURL string, userID string) (string, error)
+	PutBatch(data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
 type App struct {
-	Config *config.ServerConfig
+	config *config.ServerConfig
 	store  Store
+	logger *zap.SugaredLogger
 }
 
-func NewApp(config *config.ServerConfig, store Store) *App {
+func NewApp(config *config.ServerConfig, store Store, logger *zap.SugaredLogger) *App {
 	return &App{
-		Config: config,
+		config: config,
 		store:  store,
+		logger: logger,
 	}
 }
 
@@ -42,39 +62,19 @@ func (a *App) DeleteUserRecords(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
+
 	batch := make(models.DeleteUserURLsReq, 0)
-
-	deleteChan := make(chan models.DeleteUserURLsReq)
-	done := make(chan bool)
-
-	deleteWorker := func() {
-		for batch := range deleteChan {
-			err := a.store.DeleteMany(c, batch, userID)
-			if err != nil {
-				log.Printf("error deleting: %v", err)
-			}
-		}
-		done <- true
+	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
+		a.logger.Errorf(ErrorDecodeBody, err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	go deleteWorker()
-
-	batchCh := make(chan models.DeleteUserURLsReq)
 	go func() {
-		if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
-			log.Printf("Body cannot be decoded: %v", err)
-			res.WriteHeader(http.StatusInternalServerError)
-			return
+		err := a.store.DeleteMany(batch, userID)
+		if err != nil {
+			a.logger.Errorf("error deleting: %v", err)
 		}
-		batchCh <- batch
-		close(batchCh)
-	}()
-
-	go func() {
-		for batch := range batchCh {
-			deleteChan <- batch
-		}
-		close(deleteChan)
 	}()
 
 	res.WriteHeader(http.StatusAccepted)
@@ -84,9 +84,9 @@ func (a *App) GetUserRecords(c *gin.Context) {
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
 
-	records, err := a.store.GetAllByUserID(c, userID)
+	records, err := a.store.GetAllByUserID(userID)
 	if err != nil {
-		log.Printf("Error getting all user urls: %v", err)
+		a.logger.Errorf("Error getting all user urls: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -97,35 +97,35 @@ func (a *App) GetUserRecords(c *gin.Context) {
 	}
 
 	for idx, urlObj := range records {
-		resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, urlObj.ShortURL)
+		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.ShortURL)
 		if err != nil {
-			log.Printf("URL cannot be joined: %v", err)
+			a.logger.Errorf(ErrorJoinURL, err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		records[idx].ShortURL = resultURL
 	}
 
-	res.Header().Add("Content-Type", "application/json")
+	res.Header().Add(contentType, applicationJSON)
 	res.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(res).Encode(records); err != nil {
-		log.Printf("Error writing response in JSON: %v", err)
+		a.logger.Errorf(ErrorEncodeBody, err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
-func (a *App) RedirectURL(c *gin.Context) {
+func (a *App) RedirectToOriginal(c *gin.Context) {
 	res := c.Writer
 	id := c.Param("id")
 
-	originalURL, err := a.store.Get(c, id)
+	originalURL, err := a.store.Get(id)
 	if err != nil {
 		if errors.Is(err, postgres.ErrURLDeleted) {
 			res.WriteHeader(http.StatusGone)
 			return
 		} else {
-			log.Printf("Error getting original URL: %v", err)
+			a.logger.Errorf("Error getting original URL: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -136,7 +136,7 @@ func (a *App) RedirectURL(c *gin.Context) {
 		return
 	}
 
-	res.Header().Set("Location", originalURL)
+	res.Header().Set(location, originalURL)
 	res.WriteHeader(http.StatusTemporaryRedirect)
 }
 
@@ -147,22 +147,22 @@ func (a *App) ShortenBatch(c *gin.Context) {
 
 	batch := make([]models.URLBatchReq, 0)
 	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
-		log.Printf("Body cannot be decoded: %v", err)
+		a.logger.Errorf(ErrorDecodeBody, err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	result, err := a.store.PutBatch(c, batch, userID)
+	result, err := a.store.PutBatch(batch, userID)
 	if err != nil {
-		log.Printf("Cant put batch: %v", err)
+		a.logger.Errorf("Cant put batch: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	for idx, urlObj := range result {
-		resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, urlObj.CorrelationID)
+		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.CorrelationID)
 		if err != nil {
-			log.Printf("URL cannot be joined: %v", err)
+			a.logger.Errorf(ErrorJoinURL, err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -170,15 +170,15 @@ func (a *App) ShortenBatch(c *gin.Context) {
 	}
 
 	res.WriteHeader(http.StatusCreated)
-	res.Header().Add("Content-Type", "application/json")
+	res.Header().Add(contentType, applicationJSON)
 	if err := json.NewEncoder(res).Encode(result); err != nil {
-		log.Printf("Error writing response in JSON: %v", err)
+		a.logger.Errorf(ErrorEncodeBody, err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
-func (a *App) ShortURL(c *gin.Context) {
+func (a *App) ShortenURL(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
@@ -186,39 +186,39 @@ func (a *App) ShortURL(c *gin.Context) {
 	var originalURL string
 
 	switch req.RequestURI {
-	case "/api/shorten":
+	case apiShortenPath:
 		var shorten models.ShortenReq
 		if err := json.NewDecoder(req.Body).Decode(&shorten); err != nil {
-			log.Printf("Body cannot be decoded: %v", err)
+			a.logger.Errorf(ErrorDecodeBody, err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		originalURL = shorten.URL
-	case "/":
+	case rootPath:
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			log.Printf("Body cannot be read: %v", err)
+			a.logger.Errorf("Body cannot be read: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		originalURL = string(body)
 	}
 
-	b := make([]byte, 4, 4)
+	b := make([]byte, slugLength)
 	_, err := rand.Read(b)
 	if err != nil {
-		log.Printf("Random string generator error: %v", err)
+		a.logger.Errorf("Random string generator error: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	id := hex.EncodeToString(b)
 
-	id, err = a.store.Put(c, id, originalURL, userID)
+	id, err = a.store.Put(id, originalURL, userID)
 	if err != nil {
 		if errors.Is(err, postgres.ErrDBInsertConflict) {
 			res.WriteHeader(http.StatusConflict)
 		} else {
-			log.Printf("Error saving data: %v", err)
+			a.logger.Errorf("Error saving data: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -226,31 +226,33 @@ func (a *App) ShortURL(c *gin.Context) {
 		res.WriteHeader(http.StatusCreated)
 	}
 
-	resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, id)
+	resultURL, err := url.JoinPath(a.config.RedirectBaseURL, id)
 	if err != nil {
-		log.Printf("URL cannot be joined: %v", err)
+		a.logger.Errorf(ErrorJoinURL, err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	switch req.RequestURI {
-	case "/api/shorten":
+	case apiShortenPath:
 		respURL := models.ShortenRes{
 			Result: resultURL,
 		}
 		resp, err := json.Marshal(respURL)
 		if err != nil {
-			log.Printf("URL cannot be encoded: %v", err)
+			a.logger.Errorf("URL cannot be encoded: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		res.Header().Set("Content-Type", "application/json")
-		res.Write(resp)
+		res.Header().Set(contentType, applicationJSON)
+		if _, err := res.Write(resp); err != nil {
+			a.logger.Errorf(ErrorWritingBody, err)
+		}
 
-	case "/":
-		res.Header().Set("Content-Type", "text/plain")
+	case rootPath:
+		res.Header().Set(contentType, textPlain)
 		if _, err := res.Write([]byte(resultURL)); err != nil {
-			log.Printf("Error writing body: %v", err)
+			a.logger.Errorf("Error writing body: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -259,7 +261,7 @@ func (a *App) ShortURL(c *gin.Context) {
 
 func (a *App) Ping(c *gin.Context) {
 	if err := a.store.Ping(); err != nil {
-		log.Printf("Error opening connection to DB: %v", err)
+		a.logger.Errorf("Error opening connection to DB: %v", err)
 		c.Writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
