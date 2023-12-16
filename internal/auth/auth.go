@@ -3,14 +3,13 @@ package auth
 
 import (
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 type Claims struct {
@@ -18,18 +17,14 @@ type Claims struct {
 	UserID string
 }
 
-const (
-	tokenExp   = time.Hour * 3
-	maxAge     = 3600 * 24 * 30
-	cookieName = "jwt-token"
-	UserIDKey  = "userID"
-)
+const tokenExp = time.Hour * 3
+const cookieName = "jwt-token"
+const UserIDKey = "userID"
 
 var ErrTokenNotValid = errors.New("token is not valid")
 var ErrNoUserInToken = errors.New("no user data in token")
-var ErrBuildJWTString = errors.New("error building JWT string")
 
-func BuildJWTString(secret string) (string, error) {
+func BuildJWTString(seed string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExp)),
@@ -37,20 +32,19 @@ func BuildJWTString(secret string) (string, error) {
 		UserID: uuid.New().String(),
 	})
 
-	tokenString, err := token.SignedString([]byte(secret))
+	tokenString, err := token.SignedString([]byte(seed))
 	if err != nil {
-		return "", fmt.Errorf("error creating signed JWT: %w", err)
+		return "", err
 	}
 
-	// возвращаем строку токена
 	return tokenString, nil
 }
 
-func GetUserID(tokenString string, secret string) (string, error) {
+func GetUserID(tokenString string, seed string) (string, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims,
 		func(t *jwt.Token) (interface{}, error) {
-			return []byte(secret), nil
+			return []byte(seed), nil
 		})
 	if err != nil {
 		if !token.Valid {
@@ -67,46 +61,46 @@ func GetUserID(tokenString string, secret string) (string, error) {
 	return claims.UserID, nil
 }
 
-func AuthMiddleware(secret string, logger *zap.SugaredLogger) gin.HandlerFunc {
+func AuthMiddleware(seed string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie(cookieName)
 		if err != nil {
 			if errors.Is(err, http.ErrNoCookie) {
-				token, err := BuildJWTString(secret)
+				token, err := BuildJWTString(seed)
 				if err != nil {
-					logger.Error(ErrBuildJWTString, err)
-					c.AbortWithStatus(http.StatusInternalServerError)
+					log.Printf("Error building JWT string: %v", err)
+					c.Writer.WriteHeader(http.StatusInternalServerError)
 					return
 				}
-				c.SetCookie(cookieName, token, maxAge, "", "", false, true)
+				c.SetCookie(cookieName, token, 3600*24*30, "", "", false, true)
 				cookie = token
 			} else {
-				logger.Error("Error reading cookie[%v]: %v", cookieName, err)
-				c.AbortWithStatus(http.StatusInternalServerError)
+				log.Printf("Error reading cookie[%v]: %v", cookieName, err)
+				c.Writer.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 		}
 
-		userID, err := GetUserID(cookie, secret)
+		userID, err := GetUserID(cookie, seed)
 		if err != nil {
 			if errors.Is(err, ErrNoUserInToken) {
-				c.AbortWithStatus(http.StatusUnauthorized)
+				c.Writer.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 			if errors.Is(err, ErrTokenNotValid) {
-				token, err := BuildJWTString(secret)
+				token, err := BuildJWTString(seed)
 				if err != nil {
-					logger.Error(ErrBuildJWTString, err)
-					c.AbortWithStatus(http.StatusInternalServerError)
+					log.Printf("Error building JWT string: %v", err)
+					c.Writer.WriteHeader(http.StatusInternalServerError)
 					return
 				}
-				userID, err = GetUserID(token, secret)
+				userID, err = GetUserID(token, seed)
 				if err != nil {
-					logger.Error("Revalidate error user id from renewed token: %v", err)
-					c.AbortWithStatus(http.StatusInternalServerError)
+					log.Printf("Revalidate error user id from renewed token: %v", err)
+					c.Writer.WriteHeader(http.StatusInternalServerError)
 					return
 				}
-				c.SetCookie(cookieName, token, maxAge, "", "", false, true)
+				c.SetCookie(cookieName, token, 3600*24*30, "", "", false, true)
 			}
 		}
 

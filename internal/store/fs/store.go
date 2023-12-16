@@ -3,23 +3,21 @@ package fs
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
+	"github.com/gin-gonic/gin"
 	"io"
-	"log"
 	"os"
 	"strconv"
-
-	"github.com/rawen554/shortener/internal/models"
-	"github.com/rawen554/shortener/internal/store/memory"
+	"sync"
 )
 
-const FileStorageFilePerm = 0600
-
 type FSStorage struct {
+	countMutex sync.Mutex
+	path       string
 	*memory.MemoryStorage
-	sr   *StorageReader
-	sw   *StorageWriter
-	path string
+	sr *StorageReader
+	sw *StorageWriter
 }
 
 func NewFileStorage(filename string) (*FSStorage, error) {
@@ -35,7 +33,7 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 
 	storage, err := memory.NewMemoryStorage(records)
 	if err != nil {
-		return nil, fmt.Errorf("error initialising memory storage with records: %w", err)
+		return nil, err
 	}
 
 	sw, err := NewStorageWriter(filename)
@@ -51,11 +49,11 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 	}, nil
 }
 
-func (s *FSStorage) PutBatch(urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(url.CorrelationID, url.OriginalURL, userID)
+		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -73,16 +71,11 @@ func (s *FSStorage) Ping() error {
 }
 
 func (s *FSStorage) Close() {
-	if err := s.sw.file.Close(); err != nil {
-		log.Printf("error closing file: %v", err)
-	}
+	s.sw.file.Close()
 }
 
 func (s *FSStorage) DeleteStorageFile() error {
-	if err := os.Remove(s.path); err != nil {
-		return fmt.Errorf("error delete file: %w", err)
-	}
-	return nil
+	return os.Remove(s.path)
 }
 
 type StorageReader struct {
@@ -91,9 +84,9 @@ type StorageReader struct {
 }
 
 func NewStorageReader(filename string) (*StorageReader, error) {
-	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, FileStorageFilePerm)
+	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error open file: %w", err)
+		return nil, err
 	}
 
 	return &StorageReader{
@@ -108,7 +101,8 @@ func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, erro
 		r, err := sr.ReadLine()
 		if errors.Is(err, io.EOF) {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			return nil, err
 		}
 		records[r.ShortURL] = models.URLRecordMemory{OriginalURL: r.OriginalURL, UserID: r.UserID}
@@ -120,7 +114,7 @@ func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, erro
 func (sr *StorageReader) ReadLine() (*models.URLRecordFS, error) {
 	r := models.URLRecordFS{}
 	if err := sr.decoder.Decode(&r); err != nil {
-		return nil, fmt.Errorf("error decode records: %w", err)
+		return nil, err
 	}
 
 	return &r, nil
@@ -132,9 +126,9 @@ type StorageWriter struct {
 }
 
 func NewStorageWriter(filename string) (*StorageWriter, error) {
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, FileStorageFilePerm)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error opening file: %w", err)
+		return nil, err
 	}
 
 	return &StorageWriter{
@@ -144,19 +138,19 @@ func NewStorageWriter(filename string) (*StorageWriter, error) {
 }
 
 func (sw *StorageWriter) AppendToFile(r *models.URLRecordFS) error {
-	if err := sw.encoder.Encode(&r); err != nil {
-		return fmt.Errorf("error encode records: %w", err)
-	}
-	return nil
+	return sw.encoder.Encode(&r)
 }
 
-func (s *FSStorage) Put(id string, url string, userID string) (string, error) {
-	id, err := s.MemoryStorage.Put(id, url, userID)
+func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+	id, err := s.MemoryStorage.Put(ctx, id, url, userID)
 	if err != nil {
-		return "", fmt.Errorf("error put file: %w", err)
+		return "", err
 	}
-	return id,
-		s.sw.AppendToFile(&models.URLRecordFS{UUID: strconv.Itoa(s.UrlsCount), UserID: userID, URLRecord: models.URLRecord{
+	s.countMutex.Lock()
+	currentCount := s.UrlsCount
+	s.countMutex.Unlock()
+	return id, s.sw.AppendToFile(
+		&models.URLRecordFS{UUID: strconv.Itoa(currentCount), UserID: userID, URLRecord: models.URLRecord{
 			OriginalURL: url, ShortURL: id,
 		}})
 }
