@@ -41,3 +41,24 @@ go get -u github.com/google/uuid
 
 Random
 crypto/rand
+
+Профилирование
+```
+go get -u github.com/gin-contrib/pprof
+```
+
+после того как ваше приложение запущено, используйте go tool pprof с флагом -alloc_space или -inuse_space
+(в зависимости от того, что вы хотите измерить - используемую или выделенную память) и адресом HTTP-сервера
+профилирования вашего приложения:
+```
+go run main.go
+go tool pprof -http=:9090 http://localhost:8080/debug/pprof/heap
+```
+
+в веб-интерфейсе go tool pprof, в адресной строке вашего браузера, выполните команду сохранения профиля в файл
+```
+go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/base.pprof
+go tool pprof -http=":9090" -seconds=10 heap.out
+go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/result.pprof
+go tool pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
+```

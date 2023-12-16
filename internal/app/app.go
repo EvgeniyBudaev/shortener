@@ -204,7 +204,7 @@ func (a *App) ShortURL(c *gin.Context) {
 		originalURL = string(body)
 	}
 
-	b := make([]byte, 4)
+	b := make([]byte, 4, 4)
 	_, err := rand.Read(b)
 	if err != nil {
 		log.Printf("Random string generator error: %v", err)

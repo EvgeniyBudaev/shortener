@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/app"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
+	"github.com/EvgeniyBudaev/shortener/internal/utils"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -207,5 +209,41 @@ func TestShortURLV2(t *testing.T) {
 			require.NoError(t, err)
 			assert.NotEmpty(t, body)
 		})
+	}
+}
+
+func BenchmarkShortUrl(b *testing.B) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	length := 10
+
+	storage, err := fs.NewFileStorage("./test.json")
+	if err != nil {
+		b.Errorf("failed to initialize a new storage: %v", err)
+		return
+	}
+	defer storage.DeleteStorageFile()
+
+	testApp := app.NewApp(&config.ServerConfig{}, storage)
+	r := setupRouter(testApp)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+
+		randURL, _ := utils.GenerateRandomString(length)
+		randURL = fmt.Sprintf("%s.ru", randURL)
+		reqObj := models.ShortenReq{
+			URL: randURL,
+		}
+		obj, _ := json.Marshal(reqObj)
+		req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBuffer(obj))
+		req.Header.Add("Content-Type", "application/json")
+		b.StartTimer()
+
+		r.ServeHTTP(w, req)
+
+		w.Result()
 	}
 }

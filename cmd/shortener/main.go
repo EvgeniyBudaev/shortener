@@ -7,6 +7,7 @@ import (
 	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/compress"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
+	"github.com/gin-contrib/pprof"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +28,7 @@ const (
 
 func setupRouter(a *app.App) *gin.Engine {
 	r := gin.New()
+	pprof.Register(r)
 	ginLoggerMiddleware, err := ginLogger.Logger()
 	if err != nil {
 		log.Fatal(err)
