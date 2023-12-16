@@ -244,6 +244,7 @@ func BenchmarkShortUrl(b *testing.B) {
 
 		r.ServeHTTP(w, req)
 
-		w.Result()
+		res := w.Result()
+		res.Body.Close()
 	}
 }
