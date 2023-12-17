@@ -85,6 +85,7 @@ func (s *FSStorage) DeleteStorageFile() error {
 	return os.Remove(s.path)
 }
 
+// StorageReader структура хранилища на чтение
 type StorageReader struct {
 	file    *os.File
 	decoder *json.Decoder
