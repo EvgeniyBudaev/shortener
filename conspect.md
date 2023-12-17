@@ -67,10 +67,14 @@ go tool pprof -http=:9090 http://localhost:8080/debug/pprof/heap
 
 в веб-интерфейсе go tool pprof, в адресной строке вашего браузера, выполните команду сохранения профиля в файл
 ```
-go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/base.pprof
-go tool pprof -http=":9090" -seconds=10 heap.out
-go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/result.pprof
+curl -sK -v http://localhost:8080/debug/pprof/heap > ./profiles/base.pprof
+curl -sK -v http://localhost:8080/debug/pprof/heap > ./profiles/result.pprof
 go tool pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
+```
+p.s. (внимание) создает пустой файл, трубуется корректировка команды
+```
+go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/base.pprof
+go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/result.pprof
 ```
 
 Стилизация / Форматирование кода
