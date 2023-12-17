@@ -1,3 +1,4 @@
+// Модуль по работе с БД Postgres
 package postgres
 
 import (
@@ -67,14 +68,17 @@ func runMigrations(dsn string) error {
 	return nil
 }
 
+// Ping метод проверки соединения с БД
 func (db *DBStore) Ping() error {
 	return db.conn.Ping(context.Background())
 }
 
+// Close метод закрытия соединения с БД
 func (db *DBStore) Close() {
 	db.conn.Close()
 }
 
+// Get метод получения записи по ID
 func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
 	row := db.conn.QueryRow(ctx,
 		"SELECT original_url, deleted_flag FROM shortener WHERE slug = $1", id)
@@ -90,6 +94,7 @@ func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
 	return result, nil
 }
 
+// GetAllByUserID метод получения всех записей по ID пользователя
 func (db *DBStore) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
 	result := make([]models.URLRecord, 0)
 
@@ -115,6 +120,7 @@ func (db *DBStore) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URL
 	return result, nil
 }
 
+// DeleteMany метод удаления записей по ID пользователя
 func (db *DBStore) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error {
 	query := `
 		UPDATE shortener SET deleted_flag = TRUE
@@ -137,6 +143,7 @@ func (db *DBStore) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, us
 	return nil
 }
 
+// Put метод обновления записи по ID пользователя
 func (db *DBStore) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
 	var err error
 
@@ -159,6 +166,7 @@ func (db *DBStore) Put(ctx *gin.Context, id string, url string, userID string) (
 	return result, err
 }
 
+// PutBatch метод обновления батча по ID пользователя
 func (db *DBStore) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	query := `
 		INSERT INTO shortener VALUES (@slug, @originalUrl, @userID)

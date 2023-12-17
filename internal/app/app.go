@@ -1,3 +1,4 @@
+// Модуль приложения
 package app
 
 import (
@@ -17,6 +18,7 @@ import (
 	"net/url"
 )
 
+// Store Интерфейс содержит все необходимые методы для работы сервиса.
 type Store interface {
 	Get(ctx *gin.Context, id string) (string, error)
 	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
@@ -26,11 +28,13 @@ type Store interface {
 	Ping() error
 }
 
+// App структура приложения
 type App struct {
 	Config *config.ServerConfig
 	store  Store
 }
 
+// NewApp конструктор приложения
 func NewApp(config *config.ServerConfig, store Store) *App {
 	return &App{
 		Config: config,
@@ -38,6 +42,7 @@ func NewApp(config *config.ServerConfig, store Store) *App {
 	}
 }
 
+// DeleteUserRecords удаление записей по пользователю
 func (a *App) DeleteUserRecords(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
@@ -80,6 +85,7 @@ func (a *App) DeleteUserRecords(c *gin.Context) {
 	res.WriteHeader(http.StatusAccepted)
 }
 
+// GetUserRecords получение всех записей пользователя
 func (a *App) GetUserRecords(c *gin.Context) {
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
@@ -115,6 +121,7 @@ func (a *App) GetUserRecords(c *gin.Context) {
 	}
 }
 
+// RedirectURL перенаправление на URL
 func (a *App) RedirectURL(c *gin.Context) {
 	res := c.Writer
 	id := c.Param("id")
@@ -140,6 +147,7 @@ func (a *App) RedirectURL(c *gin.Context) {
 	res.WriteHeader(http.StatusTemporaryRedirect)
 }
 
+// ShortenBatch метод по работе с батчем
 func (a *App) ShortenBatch(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
@@ -178,6 +186,7 @@ func (a *App) ShortenBatch(c *gin.Context) {
 	}
 }
 
+// ShortURL метод по сокращению URL
 func (a *App) ShortURL(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
@@ -257,6 +266,7 @@ func (a *App) ShortURL(c *gin.Context) {
 	}
 }
 
+// Ping метод по проверке соединения с БД
 func (a *App) Ping(c *gin.Context) {
 	if err := a.store.Ping(); err != nil {
 		log.Printf("Error opening connection to DB: %v", err)
