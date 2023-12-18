@@ -1,3 +1,4 @@
+// Модуль по работе с файловым хранилищем
 package fs
 
 import (
@@ -12,6 +13,7 @@ import (
 	"sync"
 )
 
+// FSStorage описывает структуру файлового хранилища
 type FSStorage struct {
 	countMutex sync.Mutex
 	path       string
@@ -20,6 +22,7 @@ type FSStorage struct {
 	sw *StorageWriter
 }
 
+// NewFileStorage функция-констукртор
 func NewFileStorage(filename string) (*FSStorage, error) {
 	sr, err := NewStorageReader(filename)
 	if err != nil {
@@ -49,6 +52,7 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 	}, nil
 }
 
+// PutBatch метод обновления батча
 func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
@@ -66,23 +70,28 @@ func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID
 	return result, nil
 }
 
+// Ping метод проверки соединения с БД
 func (s *FSStorage) Ping() error {
 	return nil
 }
 
+// Close метод закрытия соединения
 func (s *FSStorage) Close() {
 	s.sw.file.Close()
 }
 
+// DeleteStorageFile метод удаления файла в файловом хранилище
 func (s *FSStorage) DeleteStorageFile() error {
 	return os.Remove(s.path)
 }
 
+// StorageReader структура хранилища на чтение
 type StorageReader struct {
 	file    *os.File
 	decoder *json.Decoder
 }
 
+// NewStorageReader функция-конструктор
 func NewStorageReader(filename string) (*StorageReader, error) {
 	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -95,6 +104,7 @@ func NewStorageReader(filename string) (*StorageReader, error) {
 	}, nil
 }
 
+// ReadFromFile метод чтения данных из файла
 func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, error) {
 	records := make(map[string]models.URLRecordMemory)
 	for {
@@ -111,6 +121,7 @@ func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, erro
 	return records, nil
 }
 
+// ReadLine метод чтения строки в файле
 func (sr *StorageReader) ReadLine() (*models.URLRecordFS, error) {
 	r := models.URLRecordFS{}
 	if err := sr.decoder.Decode(&r); err != nil {
@@ -120,11 +131,13 @@ func (sr *StorageReader) ReadLine() (*models.URLRecordFS, error) {
 	return &r, nil
 }
 
+// StorageWriter структура хранилища на запись
 type StorageWriter struct {
 	file    *os.File
 	encoder *json.Encoder
 }
 
+// NewStorageWriter функция-конструктор
 func NewStorageWriter(filename string) (*StorageWriter, error) {
 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -137,10 +150,12 @@ func NewStorageWriter(filename string) (*StorageWriter, error) {
 	}, nil
 }
 
+// AppendToFile метод добавления
 func (sw *StorageWriter) AppendToFile(r *models.URLRecordFS) error {
 	return sw.encoder.Encode(&r)
 }
 
+// Put метод обновления
 func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
 	id, err := s.MemoryStorage.Put(ctx, id, url, userID)
 	if err != nil {

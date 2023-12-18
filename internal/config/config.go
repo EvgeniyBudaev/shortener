@@ -1,3 +1,4 @@
+// Модуль конфигурации приложения
 package config
 
 import (
@@ -6,6 +7,7 @@ import (
 	"github.com/caarlos0/env/v6"
 )
 
+// ServerConfig описывает структуру конфигурации приложения
 type ServerConfig struct {
 	FlagRunAddr     string `env:"SERVER_ADDRESS"`
 	RedirectBaseURL string `env:"BASE_URL"`
@@ -16,6 +18,7 @@ type ServerConfig struct {
 
 var serverConfig ServerConfig
 
+// ServerConfig парсит значения из переменных окружения
 func ParseFlags() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.FlagRunAddr, "a", ":8080", "address and port to run server")
 	flag.StringVar(&serverConfig.RedirectBaseURL, "b", "http://localhost:8080", "server URI prefix")

@@ -1,3 +1,4 @@
+// Модуль аутентификации клиентских запросов.
 package auth
 
 import (
@@ -11,18 +12,28 @@ import (
 	"github.com/google/uuid"
 )
 
+// Claims структура клайма
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID string
 }
 
+// tokenExp время жизни токена
 const tokenExp = time.Hour * 3
+
+// cookieName название куки
 const cookieName = "jwt-token"
+
+// UserIDKey ID пользователя в качестве ключа
 const UserIDKey = "userID"
 
+// ErrTokenNotValid ошибка - токен не валиден
 var ErrTokenNotValid = errors.New("token is not valid")
+
+// ErrNoUserInToken ошибка - в токене отсутствует информацию по пользователю
 var ErrNoUserInToken = errors.New("no user data in token")
 
+// BuildJWTString метод по созданию JWT токена в виде строки
 func BuildJWTString(seed string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -39,6 +50,7 @@ func BuildJWTString(seed string) (string, error) {
 	return tokenString, nil
 }
 
+// GetUserID метод по получению пользователя по ID
 func GetUserID(tokenString string, seed string) (string, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims,
@@ -60,6 +72,7 @@ func GetUserID(tokenString string, seed string) (string, error) {
 	return claims.UserID, nil
 }
 
+// AuthMiddleware метод для установки куки и ID пользователя
 func AuthMiddleware(seed string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie(cookieName)

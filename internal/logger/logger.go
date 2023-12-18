@@ -1,3 +1,4 @@
+// Модуль логирования запросов.
 package logger
 
 import (
@@ -9,6 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Logger Получение middleware функции, которая будет логгировать входящие запросы.
 func Logger() (gin.HandlerFunc, error) {
 	logger, err := zap.NewDevelopment()
 	if err != nil {

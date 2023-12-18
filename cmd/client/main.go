@@ -30,7 +30,7 @@ func main() {
 	client := &http.Client{}
 	// пишем запрос
 	// запрос методом POST должен, помимо заголовков, содержать тело
-	// тело должно быть источником потокового чтения io.Reader
+	// body должно быть источником потокового чтения io.Reader
 	request, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(data.Encode()))
 	if err != nil {
 		panic(err)

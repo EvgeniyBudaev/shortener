@@ -1,3 +1,4 @@
+// Модуль по компрессии
 package compress
 
 import (
@@ -11,11 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// compressWriter позволяет прозрачно для сервера компрессировать получаемые от клиента данные.
 type compressWriter struct {
 	gin.ResponseWriter
 	zw *gzip.Writer
 }
 
+// newCompressWriter функция конструктор на запись
 func newCompressWriter(w gin.ResponseWriter) *compressWriter {
 	return &compressWriter{
 		ResponseWriter: w,
@@ -23,6 +26,7 @@ func newCompressWriter(w gin.ResponseWriter) *compressWriter {
 	}
 }
 
+// Write делает записи в заголовки
 func (c *compressWriter) Write(p []byte) (int, error) {
 	n, err := c.zw.Write(p)
 	if err != nil {
@@ -33,20 +37,25 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// WriteHeader делает записи в заголовки ответа
 func (c *compressWriter) WriteHeader(statusCode int) {
 	c.Header().Set("Content-Encoding", "gzip")
 	c.ResponseWriter.WriteHeader(statusCode)
 }
 
+// Close закрывает gzip.Writer и досылает все данные из буфера.
 func (c *compressWriter) Close() error {
 	return c.zw.Close()
 }
 
+// compressReader реализует интерфейс io.ReadCloser и позволяет прозрачно для сервера
+// декомпрессировать получаемые от клиента данные.
 type compressReader struct {
 	io.ReadCloser
 	zr *gzip.Reader
 }
 
+// newCompressReader функция конструктор на чтение
 func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
@@ -59,14 +68,17 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	}, nil
 }
 
+// Read позволяет читать данные
 func (c compressReader) Read(p []byte) (n int, err error) {
 	return c.zr.Read(p)
 }
 
+// Close закрывает
 func (c *compressReader) Close() error {
 	return c.zr.Close()
 }
 
+// Compress метод по компресии данных
 func Compress() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ow := c.Writer

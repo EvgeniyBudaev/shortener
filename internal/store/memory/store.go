@@ -1,3 +1,4 @@
+// Модуль по работе с хранилищем в памяти
 package memory
 
 import (
@@ -6,12 +7,14 @@ import (
 	"sync"
 )
 
+// MemoryStorage стукртура хранилища в памяти
 type MemoryStorage struct {
 	mux       *sync.Mutex
 	urls      map[string]models.URLRecordMemory
 	UrlsCount int
 }
 
+// NewMemoryStorage функция-конструктор
 func NewMemoryStorage(records map[string]models.URLRecordMemory) (*MemoryStorage, error) {
 	return &MemoryStorage{
 		mux:       &sync.Mutex{},
@@ -20,6 +23,7 @@ func NewMemoryStorage(records map[string]models.URLRecordMemory) (*MemoryStorage
 	}, nil
 }
 
+// Put метод обновления счетчика URL
 func (s *MemoryStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -31,6 +35,7 @@ func (s *MemoryStorage) Put(ctx *gin.Context, id string, url string, userID stri
 	return id, nil
 }
 
+// Get метод для получения URL
 func (s *MemoryStorage) Get(ctx *gin.Context, id string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -38,6 +43,7 @@ func (s *MemoryStorage) Get(ctx *gin.Context, id string) (string, error) {
 	return originalURL.OriginalURL, nil
 }
 
+// GetAllByUserID метод получения всех записей по ID пользователя
 func (s *MemoryStorage) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
 	result := make([]models.URLRecord, 0)
 	for id, url := range s.urls {
@@ -54,6 +60,7 @@ func (s *MemoryStorage) GetAllByUserID(ctx *gin.Context, userID string) ([]model
 	return result, nil
 }
 
+// DeleteMany метод по удалению URL по ID пользователя
 func (s *MemoryStorage) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error {
 	for _, id := range ids {
 		if url, ok := s.urls[id]; ok && url.UserID == userID {
@@ -63,6 +70,7 @@ func (s *MemoryStorage) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsRe
 	return nil
 }
 
+// PutBatch метод по обновлению батча по ID пользователя
 func (s *MemoryStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
@@ -80,9 +88,11 @@ func (s *MemoryStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, us
 	return result, nil
 }
 
+// Ping метод проверки соединения с БД
 func (s *MemoryStorage) Ping() error {
 	return nil
 }
 
+// Close метод закрытия соединения с БД
 func (s *MemoryStorage) Close() {
 }
