@@ -71,6 +71,12 @@ curl -sK -v http://localhost:8080/debug/pprof/heap > ./profiles/base.pprof
 curl -sK -v http://localhost:8080/debug/pprof/heap > ./profiles/result.pprof
 go tool pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
 ```
+получить заполненные файлы с бенчмарок
+```
+go test -bench=. -memprofile=base.out
+а потом в браузере смотрел 
+go tool pprof -http=":9090" bench.test base.out
+```
 p.s. (внимание) создает пустой файл, трубуется корректировка команды
 ```
 go tool pprof -alloc_space -http=:9090 http://localhost:8080/debug/pprof/heap > profiles/base.pprof
