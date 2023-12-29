@@ -44,6 +44,7 @@ func Logger() (gin.HandlerFunc, error) {
 	}, nil
 }
 
+// NewLogger конструктор
 func NewLogger() (*zap.SugaredLogger, error) {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
