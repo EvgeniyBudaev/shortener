@@ -1,3 +1,4 @@
+// Модуль кастомного анализатора
 package osexitchecker
 
 import (
@@ -6,12 +7,14 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+// Analyzer конфигурация
 var Analyzer = &analysis.Analyzer{
 	Name: "osexitcheck",
 	Doc:  "checks of calling os.Exit in main package main func",
 	Run:  run,
 }
 
+// run запуск анализатора
 func run(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
 		if file.Name.Name == "main" {
