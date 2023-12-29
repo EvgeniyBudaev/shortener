@@ -21,6 +21,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 const (
 	timeoutServerShutdown = time.Second * 5
 	timeoutShutdown       = time.Second * 10
@@ -55,6 +61,16 @@ func setupRouter(a *app.App) *gin.Engine {
 
 func main() {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	logger, err := ginLogger.NewLogger()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	logger.Infof("Build version: %s", buildVersion)
+	logger.Infof("Build date: %s", buildDate)
+	logger.Infof("Build commit: %s", buildCommit)
+
 	defer cancelCtx()
 
 	initConfig, err := config.ParseFlags()
