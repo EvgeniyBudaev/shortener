@@ -105,3 +105,12 @@ swag init --output ./swagger/
 ```
 
 Шаблон example_test.go
+
+multichecker
+```
+go get -u golang.org/x/tools
+go get -u honnef.co/go/tools
+go get -u golang.org/x/exp/typeparams
+go get -u golang.org/x/mod
+go get github.com/jackc/puddle/v2@v2.2.1
+```
