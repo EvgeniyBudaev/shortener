@@ -3,6 +3,7 @@ package logger
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"time"
 
@@ -41,4 +42,14 @@ func Logger() (gin.HandlerFunc, error) {
 		)
 		sugar.Debugln("Data", string(body))
 	}, nil
+}
+
+// NewLogger конструктор
+func NewLogger() (*zap.SugaredLogger, error) {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return nil, fmt.Errorf("error creating logger: %w", err)
+	}
+
+	return logger.Sugar(), nil
 }

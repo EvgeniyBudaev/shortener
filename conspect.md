@@ -105,3 +105,15 @@ swag init --output ./swagger/
 ```
 
 Шаблон example_test.go
+
+multichecker
+```
+go get -u golang.org/x/tools
+go get -u honnef.co/go/tools
+go get -u golang.org/x/exp/typeparams
+go get -u golang.org/x/mod
+go get github.com/jackc/puddle/v2@v2.2.1
+```
+
+## Сборка с версионированием
+`go build -ldflags "-X main.buildVersion=0.0.1 -X 'main.buildDate=$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=xxx" cmd/shortner/main.go`
