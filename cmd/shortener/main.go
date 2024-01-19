@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
+	"github.com/EvgeniyBudaev/shortener/internal/compress"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
+	"github.com/gin-contrib/pprof"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 	"github.com/EvgeniyBudaev/shortener/internal/app"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -28,6 +31,35 @@ const (
 	timeoutServerShutdown = time.Second * 5
 	timeoutShutdown       = time.Second * 10
 )
+
+func setupRouter(a *app.App) *gin.Engine {
+	r := gin.New()
+	if a.Config.ProfileMode {
+		pprof.Register(r)
+	}
+	ginLoggerMiddleware, err := ginLogger.Logger()
+	if err != nil {
+		log.Fatal(err)
+	}
+	r.Use(ginLoggerMiddleware)
+	r.Use(auth.AuthMiddleware(a.Config.Secret))
+	r.Use(compress.Compress())
+
+	r.GET("/:id", a.RedirectURL)
+	r.POST("/", a.ShortURL)
+	r.GET("/ping", a.Ping)
+
+	api := r.Group("/api")
+	{
+		api.POST("/shorten", a.ShortURL)
+		api.POST("/shorten/batch", a.ShortenBatch)
+
+		api.GET("/user/urls", a.GetUserRecords)
+		api.DELETE("/user/urls", a.DeleteUserRecords)
+	}
+
+	return r
+}
 
 func main() {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
@@ -60,12 +92,9 @@ func main() {
 
 	componentsErrs := make(chan error, 1)
 
-	appInit := app.NewApp(initConfig, storage, logger)
+	appInit := app.NewApp(initConfig, storage)
 
-	r, err := appInit.SetupRouter()
-	if err != nil {
-		logger.Fatal(err)
-	}
+	r := setupRouter(appInit)
 	srv := http.Server{
 		Addr:    initConfig.FlagRunAddr,
 		Handler: r,
@@ -73,36 +102,23 @@ func main() {
 
 	go func(errs chan<- error) {
 		if initConfig.EnableHTTPS {
-			_, errCert := os.ReadFile(initConfig.TLSCertPath)
-			_, errKey := os.ReadFile(initConfig.TLSKeyPath)
-
-			if errors.Is(errCert, os.ErrNotExist) || errors.Is(errKey, os.ErrNotExist) {
-				privateKey, certBytes, err := app.CreateCertificates(logger.Named("certs-builder"))
-				if err != nil {
-					errs <- fmt.Errorf("error creating tls certs: %w", err)
-					return
-				}
-
-				if err := app.WriteCertificates(certBytes, initConfig.TLSCertPath, privateKey, initConfig.TLSKeyPath, logger); err != nil {
-					errs <- fmt.Errorf("error writing tls certs: %w", err)
-					return
-				}
+			if err := app.CreateCertificates(); err != nil {
+				errs <- fmt.Errorf("error creating tls certs: %w", err)
 			}
 
-			if err := srv.ListenAndServeTLS(initConfig.TLSCertPath, initConfig.TLSKeyPath); err != nil {
+			if err := srv.ListenAndServeTLS("./certs/cert.pem", "./certs/private.pem"); err != nil {
 				if errors.Is(err, http.ErrServerClosed) {
 					return
 				}
 				errs <- fmt.Errorf("run tls server has failed: %w", err)
-				return
 			}
-		}
-
-		if err := srv.ListenAndServe(); err != nil {
-			if errors.Is(err, http.ErrServerClosed) {
-				return
+		} else {
+			if err := srv.ListenAndServe(); err != nil {
+				if errors.Is(err, http.ErrServerClosed) {
+					return
+				}
+				errs <- fmt.Errorf("run server has failed: %w", err)
 			}
-			errs <- fmt.Errorf("run server has failed: %w", err)
 		}
 	}(componentsErrs)
 
@@ -123,7 +139,7 @@ func main() {
 	select {
 	case <-ctx.Done():
 	case err := <-componentsErrs:
-		logger.Error(err)
+		log.Print(err)
 		cancelCtx()
 	}
 }

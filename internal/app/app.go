@@ -6,22 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
-	"github.com/EvgeniyBudaev/shortener/internal/middleware/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"go.uber.org/zap"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-)
-
-const (
-	rootPath = "/"
-	pingPath = "/ping"
 )
 
 // Store Интерфейс содержит все необходимые методы для работы сервиса.
@@ -38,15 +32,13 @@ type Store interface {
 type App struct {
 	Config *config.ServerConfig
 	store  Store
-	logger *zap.SugaredLogger
 }
 
 // NewApp конструктор приложения
-func NewApp(config *config.ServerConfig, store Store, logger *zap.SugaredLogger) *App {
+func NewApp(config *config.ServerConfig, store Store) *App {
 	return &App{
 		Config: config,
 		store:  store,
-		logger: logger,
 	}
 }
 
