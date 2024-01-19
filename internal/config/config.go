@@ -38,6 +38,8 @@ func ParseFlags() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.DatabaseDSN, "d", "", "Data Source Name (DSN)")
 	flag.StringVar(&serverConfig.Config, "c", "", "Config json file path")
 	flag.StringVar(&serverConfig.Seed, "seed", "b4952c3809196592c026529df00774e46bfb5be0", "seed")
+	flag.StringVar(&serverConfig.TLSCertPath, "l", "./certs/cert.pem", "path to tls cert file")
+	flag.StringVar(&serverConfig.TLSKeyPath, "k", "./certs/private.pem", "path to tls key file")
 	flag.Parse()
 
 	if serverConfig.Config != "" {
