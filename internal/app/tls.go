@@ -7,11 +7,12 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"math/big"
 	"net"
 	"os"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -19,9 +20,10 @@ const (
 	ip4GrayZone  = 127
 	yearsGrant   = 1
 	RSALen       = 4096
+	CertsPerm    = 0600
 )
 
-func CreateCertificates() error {
+func CreateCertificates(logger *zap.SugaredLogger) (privateKey *rsa.PrivateKey, certBytes []byte, err error) {
 	// создаём шаблон сертификата
 	cert := &x509.Certificate{
 		// указываем уникальный номер сертификата
@@ -39,50 +41,75 @@ func CreateCertificates() error {
 		NotAfter:     time.Now().AddDate(yearsGrant, 0, 0),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		// устанавливаем использование ключа для цифровой подписи,
-		// а также клиентской и серверной авторизации
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		// а также серверной авторизации
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 	}
 
 	// создаём новый приватный RSA-ключ длиной 4096 бит
 	// обратите внимание, что для генерации ключа и сертификата
 	// используется rand.Reader в качестве источника случайных данных
-	privateKey, err := rsa.GenerateKey(rand.Reader, RSALen)
+	privateKey, err = rsa.GenerateKey(rand.Reader, RSALen)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("error creating RSA key: %w", err)
 	}
 
 	// создаём сертификат x.509
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
+	certBytes, err = x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("error creating certificat: %w", err)
+	}
+
+	return privateKey, certBytes, nil
+}
+
+func WriteCertificates(
+	tlsCert []byte,
+	tlsCertPath string,
+	privateKey *rsa.PrivateKey,
+	tlsKeyPath string,
+	logger *zap.SugaredLogger,
+) error {
+	if err := os.Mkdir("certs", os.ModePerm); err != nil {
+		return fmt.Errorf("unhandled mkdir to certs: %w", err)
 	}
 
 	// кодируем сертификат и ключ в формате PEM, который
 	// используется для хранения и обмена криптографическими ключами
-	certFile, err := os.OpenFile("./certs/cert.pem", os.O_WRONLY|os.O_CREATE, 0644)
+	certFile, err := os.OpenFile(tlsCertPath, os.O_WRONLY|os.O_CREATE, CertsPerm)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("error opening cert file: %w", err)
 	}
-	defer certFile.Close()
+
+	defer func() {
+		if err := certFile.Close(); err != nil {
+			logger.Error(err)
+		}
+	}()
 
 	if err := pem.Encode(certFile, &pem.Block{
 		Type:  "CERTIFICATE",
-		Bytes: certBytes,
+		Bytes: tlsCert,
 	}); err != nil {
-		return fmt.Errorf("error creating cert file: %w", err)
+		return fmt.Errorf("error encoding cert file: %w", err)
 	}
 
-	rsaFile, err := os.OpenFile("./certs/private.pem", os.O_WRONLY|os.O_CREATE, 0644)
+	rsaFile, err := os.OpenFile(tlsKeyPath, os.O_WRONLY|os.O_CREATE, CertsPerm)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("error opening key file: %w", err)
 	}
-	defer rsaFile.Close()
+
+	defer func() {
+		if err := rsaFile.Close(); err != nil {
+			logger.Error(err)
+		}
+	}()
+
 	if err := pem.Encode(rsaFile, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	}); err != nil {
-		return fmt.Errorf("error creating RSA private key: %w", err)
+		return fmt.Errorf("error encoding RSA private key: %w", err)
 	}
 
 	return nil
