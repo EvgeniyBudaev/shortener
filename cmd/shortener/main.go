@@ -10,9 +10,9 @@ import (
 	"github.com/gin-contrib/pprof"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/EvgeniyBudaev/shortener/internal/app"
@@ -34,7 +34,9 @@ const (
 
 func setupRouter(a *app.App) *gin.Engine {
 	r := gin.New()
-	pprof.Register(r)
+	if a.Config.ProfileMode {
+		pprof.Register(r)
+	}
 	ginLoggerMiddleware, err := ginLogger.Logger()
 	if err != nil {
 		log.Fatal(err)
@@ -60,7 +62,7 @@ func setupRouter(a *app.App) *gin.Engine {
 }
 
 func main() {
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 
 	logger, err := ginLogger.NewLogger()
 	if err != nil {
@@ -99,11 +101,24 @@ func main() {
 	}
 
 	go func(errs chan<- error) {
-		if err := srv.ListenAndServe(); err != nil {
-			if errors.Is(err, http.ErrServerClosed) {
-				return
+		if initConfig.EnableHTTPS {
+			if err := app.CreateCertificates(logger.Named("certs-builder")); err != nil {
+				errs <- fmt.Errorf("error creating tls certs: %w", err)
 			}
-			errs <- fmt.Errorf("run server has failed: %w", err)
+
+			if err := srv.ListenAndServeTLS("./certs/cert.pem", "./certs/private.pem"); err != nil {
+				if errors.Is(err, http.ErrServerClosed) {
+					return
+				}
+				errs <- fmt.Errorf("run tls server has failed: %w", err)
+			} else {
+				if err := srv.ListenAndServe(); err != nil {
+					if errors.Is(err, http.ErrServerClosed) {
+						return
+					}
+					errs <- fmt.Errorf("run server has failed: %w", err)
+				}
+			}
 		}
 	}(componentsErrs)
 

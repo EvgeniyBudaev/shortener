@@ -28,3 +28,7 @@ golangci-lint
 
 # Mounting volumes
 db/data
+
+# Certs
+*.key
+*.pem
