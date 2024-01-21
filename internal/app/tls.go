@@ -1,4 +1,4 @@
-// Package app Модуль включения HTTPS в веб-сервере
+// Модуль включения HTTPS в веб-сервере
 package app
 
 import (
@@ -15,6 +15,7 @@ import (
 	"time"
 )
 
+// const Константы для метода по созданию TLS - сертификатов
 const (
 	// serialNumber Уникальный серийный номер сертификата
 	serialNumber = 1
