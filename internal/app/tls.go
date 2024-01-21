@@ -1,3 +1,4 @@
+// Package app Модуль включения HTTPS в веб-сервере
 package app
 
 import (
@@ -21,6 +22,7 @@ const (
 	RSALen       = 4096
 )
 
+// CreateCertificates - создание сертификатов
 func CreateCertificates() error {
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(serialNumber),
