@@ -73,12 +73,12 @@ func main() {
 
 	defer cancelCtx()
 
-	initConfig, err := config.ParseFlags()
+	appConfig, err := config.ParseFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	storage, err := store.NewStore(ctx, initConfig)
+	storage, err := store.NewStore(ctx, appConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,20 +90,33 @@ func main() {
 
 	componentsErrs := make(chan error, 1)
 
-	appInit := app.NewApp(initConfig, storage)
+	appInit := app.NewApp(appConfig, storage)
 
 	r := setupRouter(appInit)
 	srv := http.Server{
-		Addr:    initConfig.FlagRunAddr,
+		Addr:    appConfig.FlagRunAddr,
 		Handler: r,
 	}
 
 	go func(errs chan<- error) {
-		if err := srv.ListenAndServe(); err != nil {
-			if errors.Is(err, http.ErrServerClosed) {
-				return
+		if appConfig.EnableHTTPS {
+			if err := app.CreateCertificates(); err != nil {
+				errs <- fmt.Errorf("error creating tls certs: %w", err)
 			}
-			errs <- fmt.Errorf("run server has failed: %w", err)
+
+			if err := srv.ListenAndServeTLS("./certs/cert.pem", "./certs/private.pem"); err != nil {
+				if errors.Is(err, http.ErrServerClosed) {
+					return
+				}
+				errs <- fmt.Errorf("run tls server has failed: %w", err)
+			}
+		} else {
+			if err := srv.ListenAndServe(); err != nil {
+				if errors.Is(err, http.ErrServerClosed) {
+					return
+				}
+				errs <- fmt.Errorf("run server has failed: %w", err)
+			}
 		}
 	}(componentsErrs)
 
