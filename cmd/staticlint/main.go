@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/rawen554/shortener/cmd/staticlint/internal/osexitchecker"
+	"github.com/EvgeniyBudaev/shortener/cmd/staticlint/internal/osexitchecker"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/multichecker"
 	"golang.org/x/tools/go/analysis/passes/defers"

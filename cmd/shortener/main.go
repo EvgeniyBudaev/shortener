@@ -4,18 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
+	"github.com/EvgeniyBudaev/shortener/internal/compress"
+	"github.com/EvgeniyBudaev/shortener/internal/store"
+	"github.com/gin-contrib/pprof"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/rawen554/shortener/internal/app"
-	"github.com/rawen554/shortener/internal/config"
-	"github.com/rawen554/shortener/internal/logger"
-	"github.com/rawen554/shortener/internal/store"
+	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/config"
+	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -29,10 +32,37 @@ const (
 	timeoutShutdown       = time.Second * 10
 )
 
-func main() {
-	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
+func setupRouter(a *app.App) *gin.Engine {
+	r := gin.New()
+	pprof.Register(r)
+	ginLoggerMiddleware, err := ginLogger.Logger()
+	if err != nil {
+		log.Fatal(err)
+	}
+	r.Use(ginLoggerMiddleware)
+	r.Use(auth.AuthMiddleware(a.Config.Seed))
+	r.Use(compress.Compress())
 
-	logger, err := logger.NewLogger()
+	r.GET("/:id", a.RedirectURL)
+	r.POST("/", a.ShortURL)
+	r.GET("/ping", a.Ping)
+
+	api := r.Group("/api")
+	{
+		api.POST("/shorten", a.ShortURL)
+		api.POST("/shorten/batch", a.ShortenBatch)
+
+		api.GET("/user/urls", a.GetUserRecords)
+		api.DELETE("/user/urls", a.DeleteUserRecords)
+	}
+
+	return r
+}
+
+func main() {
+	ctx, cancelCtx := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	logger, err := ginLogger.NewLogger()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,14 +73,14 @@ func main() {
 
 	defer cancelCtx()
 
-	config, err := config.ParseFlags()
+	initConfig, err := config.ParseFlags()
 	if err != nil {
-		logger.Fatal(err)
+		log.Fatal(err)
 	}
 
-	storage, err := store.NewStore(ctx, config)
+	storage, err := store.NewStore(ctx, initConfig)
 	if err != nil {
-		logger.Fatal(err)
+		log.Fatal(err)
 	}
 
 	wg := &sync.WaitGroup{}
@@ -58,55 +88,17 @@ func main() {
 		wg.Wait()
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer logger.Info("closed DB")
-		defer wg.Done()
-		<-ctx.Done()
-
-		storage.Close()
-	}()
-
 	componentsErrs := make(chan error, 1)
 
-	a := app.NewApp(config, storage, logger.Named("app"))
+	appInit := app.NewApp(initConfig, storage)
 
-	r, err := a.SetupRouter()
-	if err != nil {
-		logger.Fatal(err)
-	}
+	r := setupRouter(appInit)
 	srv := http.Server{
-		Addr:    config.RunAddr,
+		Addr:    initConfig.FlagRunAddr,
 		Handler: r,
 	}
 
 	go func(errs chan<- error) {
-		if config.EnableHTTPS {
-			_, errCert := os.ReadFile(config.TLSCertPath)
-			_, errKey := os.ReadFile(config.TLSKeyPath)
-
-			if errors.Is(errCert, os.ErrNotExist) || errors.Is(errKey, os.ErrNotExist) {
-				privateKey, certBytes, err := app.CreateCertificates(logger.Named("certs-builder"))
-				if err != nil {
-					errs <- fmt.Errorf("error creating tls certs: %w", err)
-					return
-				}
-
-				if err := app.WriteCertificates(certBytes, config.TLSCertPath, privateKey, config.TLSKeyPath, logger); err != nil {
-					errs <- fmt.Errorf("error writing tls certs: %w", err)
-					return
-				}
-			}
-
-			if err := srv.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath); err != nil {
-				if errors.Is(err, http.ErrServerClosed) {
-					return
-				}
-				errs <- fmt.Errorf("run tls server has failed: %w", err)
-				return
-			}
-		}
-
 		if err := srv.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
 				return
@@ -117,29 +109,22 @@ func main() {
 
 	wg.Add(1)
 	go func() {
-		defer logger.Info("server has been shutdown")
+		defer log.Print("server has been shutdown and close DB")
 		defer wg.Done()
 		<-ctx.Done()
 
 		shutdownTimeoutCtx, cancelShutdownTimeoutCtx := context.WithTimeout(context.Background(), timeoutServerShutdown)
 		defer cancelShutdownTimeoutCtx()
 		if err := srv.Shutdown(shutdownTimeoutCtx); err != nil {
-			logger.Errorf("an error occurred during server shutdown: %v", err)
+			log.Printf("an error occurred during server shutdown: %v", err)
 		}
+		storage.Close()
 	}()
 
 	select {
 	case <-ctx.Done():
 	case err := <-componentsErrs:
-		logger.Error(err)
+		log.Print(err)
 		cancelCtx()
 	}
-
-	go func() {
-		ctx, cancelCtx := context.WithTimeout(context.Background(), timeoutShutdown)
-		defer cancelCtx()
-
-		<-ctx.Done()
-		logger.Fatal("failed to gracefully shutdown the service")
-	}()
 }

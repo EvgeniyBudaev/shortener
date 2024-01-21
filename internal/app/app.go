@@ -1,3 +1,4 @@
+// Модуль приложения
 package app
 
 import (
@@ -5,88 +6,93 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-	"net/url"
-
+	"github.com/EvgeniyBudaev/shortener/internal/auth"
+	"github.com/EvgeniyBudaev/shortener/internal/config"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/rawen554/shortener/internal/config"
-	"github.com/rawen554/shortener/internal/middleware/auth"
-	"github.com/rawen554/shortener/internal/models"
-	"github.com/rawen554/shortener/internal/store/postgres"
-	"go.uber.org/zap"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
 )
 
-const (
-	slugLength      = 4
-	applicationJSON = "application/json"
-	textPlain       = "text/plain"
-	contentType     = "Content-Type"
-	location        = "Location"
-
-	rootPath       = "/"
-	pingPath       = "/ping"
-	apiShortenPath = "/api/shorten"
-
-	ErrorJoinURL     = "URL cannot be joined: %v"
-	ErrorDecodeBody  = "Body cannot be decoded: %v"
-	ErrorEncodeBody  = "Error writing response in JSON: %v"
-	ErrorWritingBody = "Error writing body: %v"
-)
-
+// Store Интерфейс содержит все необходимые методы для работы сервиса.
 type Store interface {
-	Get(id string) (string, error)
-	GetAllByUserID(userID string) ([]models.URLRecord, error)
-	DeleteMany(ids models.DeleteUserURLsReq, userID string) error
-	Put(id string, shortURL string, userID string) (string, error)
-	PutBatch(data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
+	Get(ctx *gin.Context, id string) (string, error)
+	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
+	DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error
+	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
+	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
+// App структура приложения
 type App struct {
-	config *config.ServerConfig
+	Config *config.ServerConfig
 	store  Store
-	logger *zap.SugaredLogger
 }
 
-func NewApp(config *config.ServerConfig, store Store, logger *zap.SugaredLogger) *App {
+// NewApp конструктор приложения
+func NewApp(config *config.ServerConfig, store Store) *App {
 	return &App{
-		config: config,
+		Config: config,
 		store:  store,
-		logger: logger,
 	}
 }
 
+// DeleteUserRecords удаление записей по пользователю
 func (a *App) DeleteUserRecords(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
-
 	batch := make(models.DeleteUserURLsReq, 0)
-	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
-		a.logger.Errorf(ErrorDecodeBody, err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
+
+	deleteChan := make(chan models.DeleteUserURLsReq)
+	done := make(chan bool)
+
+	deleteWorker := func() {
+		for batch := range deleteChan {
+			err := a.store.DeleteMany(c, batch, userID)
+			if err != nil {
+				log.Printf("error deleting: %v", err)
+			}
+		}
+		done <- true
 	}
 
+	go deleteWorker()
+
+	batchCh := make(chan models.DeleteUserURLsReq)
 	go func() {
-		err := a.store.DeleteMany(batch, userID)
-		if err != nil {
-			a.logger.Errorf("error deleting: %v", err)
+		if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
+			log.Printf("Body cannot be decoded: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
 		}
+		batchCh <- batch
+		close(batchCh)
+	}()
+
+	go func() {
+		for batch := range batchCh {
+			deleteChan <- batch
+		}
+		close(deleteChan)
 	}()
 
 	res.WriteHeader(http.StatusAccepted)
 }
 
+// GetUserRecords получение всех записей пользователя
 func (a *App) GetUserRecords(c *gin.Context) {
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
 
-	records, err := a.store.GetAllByUserID(userID)
+	records, err := a.store.GetAllByUserID(c, userID)
 	if err != nil {
-		a.logger.Errorf("Error getting all user urls: %v", err)
+		log.Printf("Error getting all user urls: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -97,29 +103,36 @@ func (a *App) GetUserRecords(c *gin.Context) {
 	}
 
 	for idx, urlObj := range records {
-		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.ShortURL)
+		resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, urlObj.ShortURL)
 		if err != nil {
-			a.logger.Errorf(ErrorJoinURL, err)
+			log.Printf("URL cannot be joined: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		records[idx].ShortURL = resultURL
 	}
 
-	c.JSON(http.StatusOK, records)
+	res.Header().Add("Content-Type", "application/json")
+	res.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(res).Encode(records); err != nil {
+		log.Printf("Error writing response in JSON: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
-func (a *App) RedirectToOriginal(c *gin.Context) {
+// RedirectURL перенаправление на URL
+func (a *App) RedirectURL(c *gin.Context) {
 	res := c.Writer
 	id := c.Param("id")
 
-	originalURL, err := a.store.Get(id)
+	originalURL, err := a.store.Get(c, id)
 	if err != nil {
 		if errors.Is(err, postgres.ErrURLDeleted) {
 			res.WriteHeader(http.StatusGone)
 			return
 		} else {
-			a.logger.Errorf("Error getting original URL: %v", err)
+			log.Printf("Error getting original URL: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -130,9 +143,11 @@ func (a *App) RedirectToOriginal(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusTemporaryRedirect, originalURL)
+	res.Header().Set("Location", originalURL)
+	res.WriteHeader(http.StatusTemporaryRedirect)
 }
 
+// ShortenBatch метод по работе с батчем
 func (a *App) ShortenBatch(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
@@ -140,22 +155,22 @@ func (a *App) ShortenBatch(c *gin.Context) {
 
 	batch := make([]models.URLBatchReq, 0)
 	if err := json.NewDecoder(req.Body).Decode(&batch); err != nil {
-		a.logger.Errorf(ErrorDecodeBody, err)
+		log.Printf("Body cannot be decoded: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	result, err := a.store.PutBatch(batch, userID)
+	result, err := a.store.PutBatch(c, batch, userID)
 	if err != nil {
-		a.logger.Errorf("Cant put batch: %v", err)
+		log.Printf("Cant put batch: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	for idx, urlObj := range result {
-		resultURL, err := url.JoinPath(a.config.RedirectBaseURL, urlObj.CorrelationID)
+		resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, urlObj.CorrelationID)
 		if err != nil {
-			a.logger.Errorf(ErrorJoinURL, err)
+			log.Printf("URL cannot be joined: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -163,15 +178,16 @@ func (a *App) ShortenBatch(c *gin.Context) {
 	}
 
 	res.WriteHeader(http.StatusCreated)
-	res.Header().Add(contentType, applicationJSON)
+	res.Header().Add("Content-Type", "application/json")
 	if err := json.NewEncoder(res).Encode(result); err != nil {
-		a.logger.Errorf(ErrorEncodeBody, err)
+		log.Printf("Error writing response in JSON: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
-func (a *App) ShortenURL(c *gin.Context) {
+// ShortURL метод по сокращению URL
+func (a *App) ShortURL(c *gin.Context) {
 	req := c.Request
 	res := c.Writer
 	userID := c.GetString(auth.UserIDKey)
@@ -179,39 +195,39 @@ func (a *App) ShortenURL(c *gin.Context) {
 	var originalURL string
 
 	switch req.RequestURI {
-	case apiShortenPath:
+	case "/api/shorten":
 		var shorten models.ShortenReq
 		if err := json.NewDecoder(req.Body).Decode(&shorten); err != nil {
-			a.logger.Errorf(ErrorDecodeBody, err)
+			log.Printf("Body cannot be decoded: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		originalURL = shorten.URL
-	case rootPath:
+	case "/":
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			a.logger.Errorf("Body cannot be read: %v", err)
+			log.Printf("Body cannot be read: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		originalURL = string(body)
 	}
 
-	b := make([]byte, slugLength)
+	b := make([]byte, 4)
 	_, err := rand.Read(b)
 	if err != nil {
-		a.logger.Errorf("Random string generator error: %v", err)
+		log.Printf("Random string generator error: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	id := hex.EncodeToString(b)
 
-	id, err = a.store.Put(id, originalURL, userID)
+	id, err = a.store.Put(c, id, originalURL, userID)
 	if err != nil {
 		if errors.Is(err, postgres.ErrDBInsertConflict) {
 			res.WriteHeader(http.StatusConflict)
 		} else {
-			a.logger.Errorf("Error saving data: %v", err)
+			log.Printf("Error saving data: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -219,42 +235,41 @@ func (a *App) ShortenURL(c *gin.Context) {
 		res.WriteHeader(http.StatusCreated)
 	}
 
-	resultURL, err := url.JoinPath(a.config.RedirectBaseURL, id)
+	resultURL, err := url.JoinPath(a.Config.RedirectBaseURL, id)
 	if err != nil {
-		a.logger.Errorf(ErrorJoinURL, err)
+		log.Printf("URL cannot be joined: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	switch req.RequestURI {
-	case apiShortenPath:
+	case "/api/shorten":
 		respURL := models.ShortenRes{
 			Result: resultURL,
 		}
 		resp, err := json.Marshal(respURL)
 		if err != nil {
-			a.logger.Errorf("URL cannot be encoded: %v", err)
+			log.Printf("URL cannot be encoded: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		res.Header().Set(contentType, applicationJSON)
-		if _, err := res.Write(resp); err != nil {
-			a.logger.Errorf(ErrorWritingBody, err)
-		}
+		res.Header().Set("Content-Type", "application/json")
+		res.Write(resp)
 
-	case rootPath:
-		res.Header().Set(contentType, textPlain)
+	case "/":
+		res.Header().Set("Content-Type", "text/plain")
 		if _, err := res.Write([]byte(resultURL)); err != nil {
-			a.logger.Errorf("Error writing body: %v", err)
+			log.Printf("Error writing body: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 }
 
+// Ping метод по проверке соединения с БД
 func (a *App) Ping(c *gin.Context) {
 	if err := a.store.Ping(); err != nil {
-		a.logger.Errorf("Error opening connection to DB: %v", err)
+		log.Printf("Error opening connection to DB: %v", err)
 		c.Writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
