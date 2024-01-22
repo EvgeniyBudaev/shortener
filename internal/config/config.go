@@ -2,8 +2,13 @@
 package config
 
 import (
+	"bytes"
+	"dario.cat/mergo"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"github.com/caarlos0/env/v6"
+	"os"
 )
 
 // ServerConfig описывает структуру конфигурации приложения
@@ -29,6 +34,20 @@ func ParseFlags() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.Seed, "e", "b4952c3809196592c026529df00774e46bfb5be0", "seed")
 	flag.StringVar(&serverConfig.Config, "c", "", "Config json file path")
 	flag.Parse()
+
+	if serverConfig.Config != "" {
+		data, err := os.ReadFile(serverConfig.Config)
+		if err != nil {
+			return nil, fmt.Errorf("error opening config file: %w", err)
+		}
+		var configFromFile ServerConfig
+		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&configFromFile); err != nil {
+			return nil, fmt.Errorf("error parsing json file config: %w", err)
+		}
+		if err := mergo.Merge(&serverConfig, configFromFile); err != nil {
+			return nil, fmt.Errorf("cannot merge configs: %w", err)
+		}
+	}
 
 	return &serverConfig, env.Parse(&serverConfig)
 }
