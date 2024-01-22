@@ -8,7 +8,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"math/big"
 	"net"
 	"os"
@@ -56,20 +55,20 @@ func CreateCertificates() error {
 	// используется rand.Reader в качестве источника случайных данных
 	privateKey, err := rsa.GenerateKey(rand.Reader, RSALen)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// создаём сертификат x.509
 	certBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// кодируем сертификат и ключ в формате PEM, который
 	// используется для хранения и обмена криптографическими ключами
 	certFile, err := os.OpenFile("./certs/cert.pem", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer certFile.Close()
 
@@ -82,7 +81,7 @@ func CreateCertificates() error {
 
 	rsaFile, err := os.OpenFile("./certs/private.pem", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer rsaFile.Close()
 	if err := pem.Encode(rsaFile, &pem.Block{
