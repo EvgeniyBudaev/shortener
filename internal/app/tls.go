@@ -94,3 +94,30 @@ func CreateCertificates() error {
 
 	return nil
 }
+
+// CheckIfCertificatesExist - функция для проверки наличия файлов сертификатов
+func CheckIfCertificatesExist(certFilePath, rsaFilePath string) (bool, error) {
+	certExist := false
+	rsaExist := false
+
+	// Проверяем наличие файла сертификата
+	_, err := os.Stat(certFilePath)
+	if err == nil {
+		certExist = true
+	} else if !os.IsNotExist(err) {
+		// Если возникла ошибка, отличная от "файл не существует", возвращаем ошибку
+		return false, fmt.Errorf("error when checking the certificate file: %w", err)
+	}
+
+	// Проверяем наличие файла RSA-ключа
+	_, err = os.Stat(rsaFilePath)
+	if err == nil {
+		rsaExist = true
+	} else if !os.IsNotExist(err) {
+		// Если возникла ошибка, отличная от "файл не существует", возвращаем ошибку
+		return false, fmt.Errorf("error when checking the RSA key file: %w", err)
+	}
+
+	// Если оба файла существуют, возвращаем true, иначе false
+	return certExist && rsaExist, nil
+}

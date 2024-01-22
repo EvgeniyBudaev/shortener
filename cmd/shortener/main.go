@@ -100,11 +100,19 @@ func main() {
 
 	go func(errs chan<- error) {
 		if appConfig.EnableHTTPS {
-			if err := app.CreateCertificates(); err != nil {
-				errs <- fmt.Errorf("error creating tls certs: %w", err)
+			certFilePath := "./certs/cert.pem"
+			rsaFilePath := "./certs/private.pem"
+			certsExist, err := app.CheckIfCertificatesExist(certFilePath, rsaFilePath)
+			if err != nil {
+				log.Fatal(err)
 			}
-
-			if err := srv.ListenAndServeTLS("./certs/cert.pem", "./certs/private.pem"); err != nil {
+			if !certsExist {
+				// Если файлы не существуют, создаем новые сертификаты
+				if err := app.CreateCertificates(); err != nil {
+					errs <- fmt.Errorf("error creating tls certs: %w", err)
+				}
+			}
+			if err := srv.ListenAndServeTLS(certFilePath, rsaFilePath); err != nil {
 				if errors.Is(err, http.ErrServerClosed) {
 					return
 				}
