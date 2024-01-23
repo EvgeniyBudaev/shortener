@@ -115,5 +115,10 @@ go get -u golang.org/x/mod
 go get github.com/jackc/puddle/v2@v2.2.1
 ```
 
+dario.cat/mergo
+```
+go get -u dario.cat/mergo
+```
+
 ## Сборка с версионированием
 `go build -ldflags "-X main.buildVersion=0.0.1 -X 'main.buildDate=$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=xxx" cmd/shortner/main.go`
