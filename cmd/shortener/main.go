@@ -4,22 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/EvgeniyBudaev/shortener/internal/auth"
-	"github.com/EvgeniyBudaev/shortener/internal/compress"
-	"github.com/EvgeniyBudaev/shortener/internal/logic"
-	"github.com/EvgeniyBudaev/shortener/internal/store"
-	"github.com/gin-contrib/pprof"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/EvgeniyBudaev/shortener/internal/app"
-	"github.com/EvgeniyBudaev/shortener/internal/config"
-	ginLogger "github.com/EvgeniyBudaev/shortener/internal/logger"
-	"github.com/gin-gonic/gin"
+	"github.com/rawen554/shortener/internal/app"
+	"github.com/rawen554/shortener/internal/config"
+	"github.com/rawen554/shortener/internal/handlers"
+	pb "github.com/rawen554/shortener/internal/handlers/proto"
+	"github.com/rawen554/shortener/internal/logger"
+	"github.com/rawen554/shortener/internal/logic"
+	"github.com/rawen554/shortener/internal/store"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var (
@@ -33,46 +35,10 @@ const (
 	timeoutShutdown       = time.Second * 10
 )
 
-func setupRouter(a *app.App) *gin.Engine {
-	r := gin.New()
-	if a.Config.ProfileMode {
-		pprof.Register(r)
-	}
-	ginLoggerMiddleware, err := ginLogger.Logger()
-	if err != nil {
-		log.Fatal(err)
-	}
-	subnetAuthMiddleware := auth.NewSubnetChecker(a.Config.TrustedSubnet, a.Logger.Named("subnet_middleware"))
-	r.Use(ginLoggerMiddleware)
-	r.Use(auth.AuthMiddleware(a.Config.Seed))
-	r.Use(compress.Compress())
-
-	r.GET("/:id", a.RedirectURL)
-	r.POST("/", a.ShortURL)
-	r.GET("/ping", a.Ping)
-
-	api := r.Group("/api")
-	{
-		internalAPI := api.Group("/internal")
-		internalAPI.Use(subnetAuthMiddleware)
-		{
-			internalAPI.GET("/stats", a.GetStats)
-		}
-
-		api.POST("/shorten", a.ShortURL)
-		api.POST("/shorten/batch", a.ShortenBatch)
-
-		api.GET("/user/urls", a.GetUserRecords)
-		api.DELETE("/user/urls", a.DeleteUserRecords)
-	}
-
-	return r
-}
-
 func main() {
 	ctx, cancelCtx := signal.NotifyContext(context.Background(), syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 
-	logger, err := ginLogger.NewLogger()
+	logger, err := logger.NewLogger()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -83,14 +49,14 @@ func main() {
 
 	defer cancelCtx()
 
-	appConfig, err := config.ParseFlags()
+	config, err := config.ParseFlags()
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
-	storage, err := store.NewStore(ctx, appConfig)
+	storage, err := store.NewStore(ctx, config)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
 	wg := &sync.WaitGroup{}
@@ -109,63 +75,104 @@ func main() {
 
 	componentsErrs := make(chan error, 1)
 
-	coreLogic := logic.NewCoreLogic(appConfig, storage, logger.Named("logic"))
-	appInit := app.NewApp(appConfig, coreLogic, logger.Named("app"))
+	coreLogic := logic.NewCoreLogic(config, storage, logger.Named("logic"))
+	a := app.NewApp(config, coreLogic, logger.Named("app"))
 
-	r := setupRouter(appInit)
+	r, err := a.SetupRouter()
+	if err != nil {
+		logger.Fatal(err)
+	}
 	srv := http.Server{
-		Addr:    appConfig.FlagRunAddr,
+		Addr:    config.RunAddr,
 		Handler: r,
 	}
 
 	go func(errs chan<- error) {
-		if appConfig.EnableHTTPS {
-			certFilePath := "./certs/cert.pem"
-			rsaFilePath := "./certs/private.pem"
-			certsExist, err := app.CheckIfCertificatesExist(certFilePath, rsaFilePath)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !certsExist {
-				// Если файлы не существуют, создаем новые сертификаты
-				if err := app.CreateCertificates(); err != nil {
+		if config.EnableHTTPS {
+			_, errCert := os.ReadFile(config.TLSCertPath)
+			_, errKey := os.ReadFile(config.TLSKeyPath)
+
+			if errors.Is(errCert, os.ErrNotExist) || errors.Is(errKey, os.ErrNotExist) {
+				privateKey, certBytes, err := app.CreateCertificates(logger.Named("certs-builder"))
+				if err != nil {
 					errs <- fmt.Errorf("error creating tls certs: %w", err)
+					return
+				}
+
+				if err := app.WriteCertificates(certBytes, config.TLSCertPath, privateKey, config.TLSKeyPath, logger); err != nil {
+					errs <- fmt.Errorf("error writing tls certs: %w", err)
+					return
 				}
 			}
-			if err := srv.ListenAndServeTLS(certFilePath, rsaFilePath); err != nil {
+
+			if err := srv.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath); err != nil {
 				if errors.Is(err, http.ErrServerClosed) {
 					return
 				}
 				errs <- fmt.Errorf("run tls server has failed: %w", err)
+				return
 			}
-		} else {
-			if err := srv.ListenAndServe(); err != nil {
-				if errors.Is(err, http.ErrServerClosed) {
-					return
-				}
-				errs <- fmt.Errorf("run server has failed: %w", err)
+		}
+
+		if err := srv.ListenAndServe(); err != nil {
+			if errors.Is(err, http.ErrServerClosed) {
+				return
 			}
+			errs <- fmt.Errorf("run server has failed: %w", err)
 		}
 	}(componentsErrs)
 
+	if config.GRPCPort != "" {
+		wg.Add(1)
+		go func(errs chan<- error) {
+			defer wg.Done()
+			lis, err := net.Listen("tcp", fmt.Sprintf(":%s", config.GRPCPort))
+			if err != nil {
+				logger.Errorf("failed to listen: %w", err)
+				errs <- err
+				return
+			}
+			grpcServer := grpc.NewServer()
+			reflection.Register(grpcServer)
+
+			pb.RegisterShortenerServer(grpcServer, handlers.NewService(logger, coreLogic))
+
+			logger.Infof("running gRPC service on %s", config.GRPCPort)
+
+			if err = grpcServer.Serve(lis); err != nil {
+				if errors.Is(err, grpc.ErrServerStopped) {
+					return
+				}
+				errs <- err
+			}
+		}(componentsErrs)
+	}
+
 	wg.Add(1)
 	go func() {
-		defer log.Print("server has been shutdown and close DB")
+		defer logger.Info("server has been shutdown")
 		defer wg.Done()
 		<-ctx.Done()
 
 		shutdownTimeoutCtx, cancelShutdownTimeoutCtx := context.WithTimeout(context.Background(), timeoutServerShutdown)
 		defer cancelShutdownTimeoutCtx()
 		if err := srv.Shutdown(shutdownTimeoutCtx); err != nil {
-			log.Printf("an error occurred during server shutdown: %v", err)
+			logger.Errorf("an error occurred during server shutdown: %v", err)
 		}
-		storage.Close()
 	}()
 
 	select {
 	case <-ctx.Done():
 	case err := <-componentsErrs:
-		log.Print(err)
+		logger.Error(err)
 		cancelCtx()
 	}
+
+	go func() {
+		ctx, cancelCtx := context.WithTimeout(context.Background(), timeoutShutdown)
+		defer cancelCtx()
+
+		<-ctx.Done()
+		logger.Fatal("failed to gracefully shutdown the service")
+	}()
 }

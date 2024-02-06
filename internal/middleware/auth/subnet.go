@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewSubnetChecker конструктор
 func NewSubnetChecker(trustedSubnet string, logger *zap.SugaredLogger) gin.HandlerFunc {
 	_, netMask, err := net.ParseCIDR(trustedSubnet)
 	if err != nil {
@@ -37,7 +36,7 @@ func NewSubnetChecker(trustedSubnet string, logger *zap.SugaredLogger) gin.Handl
 		}
 
 		if !netMask.Contains(ipAddr) {
-			logger.Errorf("internal request: unauthorized request denied: ip %s", ipAddr.String())
+			logger.Errorf("internal request: unauthorized request denied: ip %s", ipAddr)
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}

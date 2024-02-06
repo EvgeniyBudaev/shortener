@@ -1,21 +1,17 @@
-// Модуль по работе с хранилищем в памяти
 package memory
 
 import (
-	"fmt"
-	"github.com/EvgeniyBudaev/shortener/internal/models"
-	"github.com/gin-gonic/gin"
 	"sync"
+
+	"github.com/rawen554/shortener/internal/models"
 )
 
-// MemoryStorage стукртура хранилища в памяти
 type MemoryStorage struct {
 	mux       *sync.Mutex
 	urls      map[string]models.URLRecordMemory
 	UrlsCount int
 }
 
-// NewMemoryStorage функция-конструктор
 func NewMemoryStorage(records map[string]models.URLRecordMemory) (*MemoryStorage, error) {
 	return &MemoryStorage{
 		mux:       &sync.Mutex{},
@@ -24,29 +20,29 @@ func NewMemoryStorage(records map[string]models.URLRecordMemory) (*MemoryStorage
 	}, nil
 }
 
-// Put метод обновления счетчика URL
-func (s *MemoryStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+func (s *MemoryStorage) Put(id string, url string, userID string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.urls[id] = models.URLRecordMemory{
 		OriginalURL: url,
 		UserID:      userID,
 	}
-	s.UrlsCount += 1
+	s.UrlsCount++
 	return id, nil
 }
 
-// Get метод для получения URL
-func (s *MemoryStorage) Get(ctx *gin.Context, id string) (string, error) {
+func (s *MemoryStorage) Get(id string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
+
 	originalURL := s.urls[id]
+
 	return originalURL.OriginalURL, nil
 }
 
-// GetAllByUserID метод получения всех записей по ID пользователя
-func (s *MemoryStorage) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
+func (s *MemoryStorage) GetAllByUserID(userID string) ([]models.URLRecord, error) {
 	result := make([]models.URLRecord, 0)
+
 	for id, url := range s.urls {
 		if url.UserID == userID {
 			s.mux.Lock()
@@ -58,25 +54,29 @@ func (s *MemoryStorage) GetAllByUserID(ctx *gin.Context, userID string) ([]model
 			})
 		}
 	}
+
 	return result, nil
 }
 
-// DeleteMany метод по удалению URL по ID пользователя
-func (s *MemoryStorage) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error {
+func (s *MemoryStorage) DeleteMany(ids models.DeleteUserURLsReq, userID string) error {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
 	for _, id := range ids {
 		if url, ok := s.urls[id]; ok && url.UserID == userID {
 			delete(s.urls, id)
+			s.UrlsCount--
 		}
 	}
+
 	return nil
 }
 
-// PutBatch метод по обновлению батча по ID пользователя
-func (s *MemoryStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (s *MemoryStorage) PutBatch(urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL, userID)
+		id, err := s.Put(url.CorrelationID, url.OriginalURL, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -89,16 +89,27 @@ func (s *MemoryStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, us
 	return result, nil
 }
 
-// Ping метод проверки соединения с БД
 func (s *MemoryStorage) Ping() error {
 	return nil
 }
 
-// Close метод закрытия соединения с БД
 func (s *MemoryStorage) Close() {
+
 }
 
-// GetStats метод получения
-func (s *MemoryStorage) GetStats() (*models.Stats, error) {
-	return nil, fmt.Errorf("not implemented")
+func (s *MemoryStorage) GetStats() (stats *models.Stats, err error) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	usersIDs := make(map[string]interface{})
+
+	for _, record := range s.urls {
+		if _, ok := usersIDs[record.UserID]; !ok {
+			usersIDs[record.UserID] = nil
+		}
+	}
+
+	stats.Users = len(usersIDs)
+	stats.URLs = s.UrlsCount
+
+	return stats, nil
 }

@@ -6,12 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/url"
 
-	"github.com/EvgeniyBudaev/shortener/internal/config"
-	"github.com/EvgeniyBudaev/shortener/internal/models"
-	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
+	"github.com/rawen554/shortener/internal/config"
+	"github.com/rawen554/shortener/internal/models"
+	"github.com/rawen554/shortener/internal/store/postgres"
 	"go.uber.org/zap"
 )
 
@@ -36,12 +35,12 @@ var (
 )
 
 type Store interface {
-	Get(ctx *gin.Context, id string) (string, error)
+	Get(id string) (string, error)
 	GetStats() (*models.Stats, error)
-	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
-	DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error
-	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
-	PutBatch(ctx *gin.Context, data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
+	GetAllByUserID(userID string) ([]models.URLRecord, error)
+	DeleteMany(ids models.DeleteUserURLsReq, userID string) error
+	Put(id string, shortURL string, userID string) (string, error)
+	PutBatch(data []models.URLBatchReq, userID string) ([]models.URLBatchRes, error)
 	Ping() error
 }
 
@@ -59,8 +58,8 @@ func NewCoreLogic(config *config.ServerConfig, store Store, logger *zap.SugaredL
 	}
 }
 
-func (cl *CoreLogic) DeleteUserRecords(ctx *gin.Context, userID string, urls models.DeleteUserURLsReq) error {
-	if err := cl.store.DeleteMany(ctx, urls, userID); err != nil {
+func (cl *CoreLogic) DeleteUserRecords(ctx context.Context, userID string, urls models.DeleteUserURLsReq) error {
+	if err := cl.store.DeleteMany(urls, userID); err != nil {
 		err = fmt.Errorf("error deleting: %w", err)
 		cl.logger.Error(err)
 		return err
@@ -69,8 +68,8 @@ func (cl *CoreLogic) DeleteUserRecords(ctx *gin.Context, userID string, urls mod
 	return nil
 }
 
-func (cl *CoreLogic) GetUserRecords(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
-	records, err := cl.store.GetAllByUserID(ctx, userID)
+func (cl *CoreLogic) GetUserRecords(ctx context.Context, userID string) ([]models.URLRecord, error) {
+	records, err := cl.store.GetAllByUserID(userID)
 	if err != nil {
 		err = fmt.Errorf("error getting all user urls: %w", err)
 		cl.logger.Error(err)
@@ -94,8 +93,8 @@ func (cl *CoreLogic) GetUserRecords(ctx *gin.Context, userID string) ([]models.U
 	return records, nil
 }
 
-func (cl *CoreLogic) GetOriginalURL(ctx *gin.Context, shortURL string) (string, error) {
-	originalURL, err := cl.store.Get(ctx, shortURL)
+func (cl *CoreLogic) GetOriginalURL(ctx context.Context, shortURL string) (string, error) {
+	originalURL, err := cl.store.Get(shortURL)
 	if err != nil {
 		if errors.Is(err, postgres.ErrURLDeleted) {
 			return "", ErrIsDeleted
@@ -114,11 +113,11 @@ func (cl *CoreLogic) GetOriginalURL(ctx *gin.Context, shortURL string) (string, 
 }
 
 func (cl *CoreLogic) ShortenBatch(
-	ctx *gin.Context,
+	ctx context.Context,
 	userID string,
 	batchURLsReq []models.URLBatchReq,
 ) ([]models.URLBatchRes, error) {
-	result, err := cl.store.PutBatch(ctx, batchURLsReq, userID)
+	result, err := cl.store.PutBatch(batchURLsReq, userID)
 	if err != nil {
 		err := fmt.Errorf("cant put batch: %w", err)
 		cl.logger.Error(err)
@@ -138,7 +137,7 @@ func (cl *CoreLogic) ShortenBatch(
 	return result, nil
 }
 
-func (cl *CoreLogic) ShortenURL(ctx *gin.Context, userID string, originalURL string) (string, error) {
+func (cl *CoreLogic) ShortenURL(ctx context.Context, userID string, originalURL string) (string, error) {
 	b := make([]byte, slugLength)
 	_, err := rand.Read(b)
 	if err != nil {
@@ -148,7 +147,7 @@ func (cl *CoreLogic) ShortenURL(ctx *gin.Context, userID string, originalURL str
 	}
 	id := hex.EncodeToString(b)
 
-	id, err = cl.store.Put(ctx, id, originalURL, userID)
+	id, err = cl.store.Put(id, originalURL, userID)
 	if err != nil {
 		if errors.Is(err, postgres.ErrDBInsertConflict) {
 			return "", ErrConflict

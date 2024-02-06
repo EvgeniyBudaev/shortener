@@ -6,7 +6,6 @@ import (
 	"math/rand"
 )
 
-// GenerateRandomString метод генерации рандомной строки
 func GenerateRandomString(n int) (string, error) {
 	if n <= 0 {
 		return "", fmt.Errorf("wrong string length: %d", n)
