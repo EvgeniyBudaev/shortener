@@ -1,3 +1,4 @@
+// Модуль включения HTTPS в веб-сервере
 package app
 
 import (
@@ -11,19 +12,22 @@ import (
 	"net"
 	"os"
 	"time"
-
-	"go.uber.org/zap"
 )
 
+// const Константы для метода по созданию TLS - сертификатов
 const (
+	// serialNumber Уникальный серийный номер сертификата
 	serialNumber = 1
-	ip4GrayZone  = 127
-	yearsGrant   = 1
-	RSALen       = 4096
-	CertsPerm    = 0600
+	// ip4GrayZone IP-адрес, разрешенный для сертификата (в данном случае используется 127.0.0.1)
+	ip4GrayZone = 127
+	// yearsGrant Срок действия сертификата в годах
+	yearsGrant = 1
+	// RSALen Длина приватного ключа RSA в битах
+	RSALen = 4096
 )
 
-func CreateCertificates(logger *zap.SugaredLogger) (privateKey *rsa.PrivateKey, certBytes []byte, err error) {
+// CreateCertificates - создание TLS - сертификатов
+func CreateCertificates() error {
 	// создаём шаблон сертификата
 	cert := &x509.Certificate{
 		// указываем уникальный номер сертификата
@@ -41,76 +45,78 @@ func CreateCertificates(logger *zap.SugaredLogger) (privateKey *rsa.PrivateKey, 
 		NotAfter:     time.Now().AddDate(yearsGrant, 0, 0),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		// устанавливаем использование ключа для цифровой подписи,
-		// а также серверной авторизации
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		// а также клиентской и серверной авторизации
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 	}
 
 	// создаём новый приватный RSA-ключ длиной 4096 бит
 	// обратите внимание, что для генерации ключа и сертификата
 	// используется rand.Reader в качестве источника случайных данных
-	privateKey, err = rsa.GenerateKey(rand.Reader, RSALen)
+	privateKey, err := rsa.GenerateKey(rand.Reader, RSALen)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating RSA key: %w", err)
+		return err
 	}
 
 	// создаём сертификат x.509
-	certBytes, err = x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating certificat: %w", err)
-	}
-
-	return privateKey, certBytes, nil
-}
-
-func WriteCertificates(
-	tlsCert []byte,
-	tlsCertPath string,
-	privateKey *rsa.PrivateKey,
-	tlsKeyPath string,
-	logger *zap.SugaredLogger,
-) error {
-	if err := os.Mkdir("certs", os.ModePerm); err != nil {
-		return fmt.Errorf("unhandled mkdir to certs: %w", err)
+		return err
 	}
 
 	// кодируем сертификат и ключ в формате PEM, который
 	// используется для хранения и обмена криптографическими ключами
-	certFile, err := os.OpenFile(tlsCertPath, os.O_WRONLY|os.O_CREATE, CertsPerm)
+	certFile, err := os.OpenFile("./certs/cert.pem", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		return fmt.Errorf("error opening cert file: %w", err)
+		return err
 	}
-
-	defer func() {
-		if err := certFile.Close(); err != nil {
-			logger.Error(err)
-		}
-	}()
+	defer certFile.Close()
 
 	if err := pem.Encode(certFile, &pem.Block{
 		Type:  "CERTIFICATE",
-		Bytes: tlsCert,
+		Bytes: certBytes,
 	}); err != nil {
-		return fmt.Errorf("error encoding cert file: %w", err)
+		return fmt.Errorf("error creating cert file: %w", err)
 	}
 
-	rsaFile, err := os.OpenFile(tlsKeyPath, os.O_WRONLY|os.O_CREATE, CertsPerm)
+	rsaFile, err := os.OpenFile("./certs/private.pem", os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		return fmt.Errorf("error opening key file: %w", err)
+		return err
 	}
-
-	defer func() {
-		if err := rsaFile.Close(); err != nil {
-			logger.Error(err)
-		}
-	}()
-
+	defer rsaFile.Close()
 	if err := pem.Encode(rsaFile, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	}); err != nil {
-		return fmt.Errorf("error encoding RSA private key: %w", err)
+		return fmt.Errorf("error creating RSA private key: %w", err)
 	}
 
 	return nil
+}
+
+// CheckIfCertificatesExist - функция для проверки наличия файлов сертификатов
+func CheckIfCertificatesExist(certFilePath, rsaFilePath string) (bool, error) {
+	certExist := false
+	rsaExist := false
+
+	// Проверяем наличие файла сертификата
+	_, err := os.Stat(certFilePath)
+	if err == nil {
+		certExist = true
+	} else if !os.IsNotExist(err) {
+		// Если возникла ошибка, отличная от "файл не существует", возвращаем ошибку
+		return false, fmt.Errorf("error when checking the certificate file: %w", err)
+	}
+
+	// Проверяем наличие файла RSA-ключа
+	_, err = os.Stat(rsaFilePath)
+	if err == nil {
+		rsaExist = true
+	} else if !os.IsNotExist(err) {
+		// Если возникла ошибка, отличная от "файл не существует", возвращаем ошибку
+		return false, fmt.Errorf("error when checking the RSA key file: %w", err)
+	}
+
+	// Если оба файла существуют, возвращаем true, иначе false
+	return certExist && rsaExist, nil
 }

@@ -22,18 +22,9 @@ vendor/
 # IDEs directories
 .idea
 .vscode
-
-# Platform specific
 */**/.DS_Store
+short-url-db.json
+golangci-lint
 
 # Mounting volumes
 db/data
-
-# Other
-short-url-db.json
-golangci-lint
-profile.cov
-
-# Certs
-*.key
-*.pem

@@ -1,27 +1,29 @@
+// Модуль по работе с файловым хранилищем
 package fs
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
+	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
+	"github.com/gin-gonic/gin"
 	"io"
-	"log"
 	"os"
 	"strconv"
-
-	"github.com/rawen554/shortener/internal/models"
-	"github.com/rawen554/shortener/internal/store/memory"
+	"sync"
 )
 
-const FileStorageFilePerm = 0600
-
+// FSStorage описывает структуру файлового хранилища
 type FSStorage struct {
+	countMutex sync.Mutex
+	path       string
 	*memory.MemoryStorage
-	sr   *StorageReader
-	sw   *StorageWriter
-	path string
+	sr *StorageReader
+	sw *StorageWriter
 }
 
+// NewFileStorage функция-констукртор
 func NewFileStorage(filename string) (*FSStorage, error) {
 	sr, err := NewStorageReader(filename)
 	if err != nil {
@@ -35,7 +37,7 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 
 	storage, err := memory.NewMemoryStorage(records)
 	if err != nil {
-		return nil, fmt.Errorf("error initialising memory storage with records: %w", err)
+		return nil, err
 	}
 
 	sw, err := NewStorageWriter(filename)
@@ -51,11 +53,12 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 	}, nil
 }
 
-func (s *FSStorage) PutBatch(urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+// PutBatch метод обновления батча
+func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
-		id, err := s.Put(url.CorrelationID, url.OriginalURL, userID)
+		id, err := s.Put(ctx, url.CorrelationID, url.OriginalURL, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -68,32 +71,32 @@ func (s *FSStorage) PutBatch(urls []models.URLBatchReq, userID string) ([]models
 	return result, nil
 }
 
+// Ping метод проверки соединения с БД
 func (s *FSStorage) Ping() error {
 	return nil
 }
 
+// Close метод закрытия соединения
 func (s *FSStorage) Close() {
-	if err := s.sw.file.Close(); err != nil {
-		log.Printf("error closing file: %v", err)
-	}
+	s.sw.file.Close()
 }
 
+// DeleteStorageFile метод удаления файла в файловом хранилище
 func (s *FSStorage) DeleteStorageFile() error {
-	if err := os.Remove(s.path); err != nil {
-		return fmt.Errorf("error delete file: %w", err)
-	}
-	return nil
+	return os.Remove(s.path)
 }
 
+// StorageReader структура хранилища на чтение
 type StorageReader struct {
 	file    *os.File
 	decoder *json.Decoder
 }
 
+// NewStorageReader функция-конструктор
 func NewStorageReader(filename string) (*StorageReader, error) {
-	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, FileStorageFilePerm)
+	file, err := os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error open file: %w", err)
+		return nil, err
 	}
 
 	return &StorageReader{
@@ -102,13 +105,15 @@ func NewStorageReader(filename string) (*StorageReader, error) {
 	}, nil
 }
 
+// ReadFromFile метод чтения данных из файла
 func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, error) {
 	records := make(map[string]models.URLRecordMemory)
 	for {
 		r, err := sr.ReadLine()
 		if errors.Is(err, io.EOF) {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			return nil, err
 		}
 		records[r.ShortURL] = models.URLRecordMemory{OriginalURL: r.OriginalURL, UserID: r.UserID}
@@ -117,24 +122,27 @@ func (sr *StorageReader) ReadFromFile() (map[string]models.URLRecordMemory, erro
 	return records, nil
 }
 
+// ReadLine метод чтения строки в файле
 func (sr *StorageReader) ReadLine() (*models.URLRecordFS, error) {
 	r := models.URLRecordFS{}
 	if err := sr.decoder.Decode(&r); err != nil {
-		return nil, fmt.Errorf("error decode records: %w", err)
+		return nil, err
 	}
 
 	return &r, nil
 }
 
+// StorageWriter структура хранилища на запись
 type StorageWriter struct {
 	file    *os.File
 	encoder *json.Encoder
 }
 
+// NewStorageWriter функция-конструктор
 func NewStorageWriter(filename string) (*StorageWriter, error) {
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, FileStorageFilePerm)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error opening file: %w", err)
+		return nil, err
 	}
 
 	return &StorageWriter{
@@ -143,29 +151,27 @@ func NewStorageWriter(filename string) (*StorageWriter, error) {
 	}, nil
 }
 
+// AppendToFile метод добавления
 func (sw *StorageWriter) AppendToFile(r *models.URLRecordFS) error {
-	if err := sw.encoder.Encode(&r); err != nil {
-		return fmt.Errorf("error encode records: %w", err)
-	}
-	return nil
+	return sw.encoder.Encode(&r)
 }
 
-func (s *FSStorage) Put(id string, url string, userID string) (string, error) {
-	id, err := s.MemoryStorage.Put(id, url, userID)
+// Put метод обновления
+func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+	id, err := s.MemoryStorage.Put(ctx, id, url, userID)
 	if err != nil {
-		return "", fmt.Errorf("error put file: %w", err)
+		return "", err
 	}
-	return id,
-		s.sw.AppendToFile(&models.URLRecordFS{UUID: strconv.Itoa(s.UrlsCount), UserID: userID, URLRecord: models.URLRecord{
+	s.countMutex.Lock()
+	currentCount := s.UrlsCount
+	s.countMutex.Unlock()
+	return id, s.sw.AppendToFile(
+		&models.URLRecordFS{UUID: strconv.Itoa(currentCount), UserID: userID, URLRecord: models.URLRecord{
 			OriginalURL: url, ShortURL: id,
 		}})
 }
 
-func (s *FSStorage) GetStats() (stats *models.Stats, err error) {
-	stats, err = s.MemoryStorage.GetStats()
-	if err != nil {
-		return nil, fmt.Errorf("fs storage error: %w", err)
-	}
-
-	return stats, nil
+// GetStats метод получения
+func (s *FSStorage) GetStats() (*models.Stats, error) {
+	return nil, fmt.Errorf("not implemented")
 }

@@ -1,67 +1,59 @@
+// Модуль конфигурации приложения
 package config
 
 import (
 	"bytes"
+	"dario.cat/mergo"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
-
-	"dario.cat/mergo"
 	"github.com/caarlos0/env/v6"
+	"os"
 )
 
+// ServerConfig описывает структуру конфигурации приложения
 type ServerConfig struct {
-	RunAddr         string `json:"server_address" env:"SERVER_ADDRESS"`
+	FlagRunAddr     string `json:"server_address" env:"SERVER_ADDRESS"`
+	EnableHTTPS     bool   `env:"ENABLE_HTTPS"`
 	RedirectBaseURL string `json:"base_url" env:"BASE_URL"`
 	FileStoragePath string `json:"file_storage_path" env:"FILE_STORAGE_PATH"`
 	DatabaseDSN     string `json:"database_dsn" env:"DATABASE_DSN"`
-	Secret          string `json:"-" env:"SECRET"`
+	Seed            string `json:"-" env:"SEED"`
 	Config          string `json:"-" env:"CONFIG"`
-	TLSCertPath     string `json:"tls_cert_path" env:"TLS_CERT_PATH"`
-	TLSKeyPath      string `json:"tls_key_path" env:"TLS_KEY_PATH"`
 	TrustedSubnet   string `json:"trusted_subnet" env:"TRUSTED_SUBNET"`
 	GRPCPort        string `json:"grpc_port" env:"GRPC_PORT"`
-	EnableHTTPS     bool   `json:"enable_https" env:"ENABLE_HTTPS"`
 	ProfileMode     bool   `json:"profile_mode" env:"PROFILE_MODE"`
 }
 
-var config ServerConfig
+var serverConfig ServerConfig
 
+// ServerConfig парсит значения из переменных окружения
 func ParseFlags() (*ServerConfig, error) {
-	flag.StringVar(&config.RunAddr, "a", ":8080", "address and port to run server")
-	flag.BoolVar(&config.EnableHTTPS, "s", false, "enable https")
-	flag.BoolVar(&config.ProfileMode, "p", false, "register pprof profiler")
-	flag.StringVar(&config.RedirectBaseURL, "b", "http://localhost:8080", "server URI prefix")
-	flag.StringVar(&config.FileStoragePath, "f", "", "file storage path")
-	flag.StringVar(&config.DatabaseDSN, "d", "", "Data Source Name (DSN)")
-	flag.StringVar(&config.Secret, "e", "b4952c3809196592c026529df00774e46bfb5be0", "Secret")
-	flag.StringVar(&config.Config, "c", "", "Config json file path")
-	flag.StringVar(&config.TLSCertPath, "l", "./certs/cert.pem", "path to tls cert file")
-	flag.StringVar(&config.TLSKeyPath, "k", "./certs/private.pem", "path to tls key file")
-	flag.StringVar(&config.TrustedSubnet, "t", "", "trusted CIDR (ex. 192.168.0.0/24)")
-	flag.StringVar(&config.GRPCPort, "grpc", "", "will add listener to port if specified")
+	flag.StringVar(&serverConfig.FlagRunAddr, "a", ":8080", "address and port to run server")
+	flag.BoolVar(&serverConfig.EnableHTTPS, "s", false, "enable https")
+	flag.StringVar(&serverConfig.RedirectBaseURL, "b", "http://localhost:8080", "server URI prefix")
+	flag.StringVar(&serverConfig.FileStoragePath, "f", "", "file storage path")
+	flag.StringVar(&serverConfig.DatabaseDSN, "d", "", "Data Source Name (DSN)")
+	flag.StringVar(&serverConfig.Seed, "e", "b4952c3809196592c026529df00774e46bfb5be0", "seed")
+	flag.StringVar(&serverConfig.Config, "c", "", "Config json file path")
+	flag.StringVar(&serverConfig.TrustedSubnet, "t", "", "trusted CIDR (ex. 192.168.0.0/24)")
+	flag.StringVar(&serverConfig.GRPCPort, "grpc", "", "will add listener to port if specified")
+	flag.BoolVar(&serverConfig.ProfileMode, "p", false, "register pprof profiler")
 	flag.Parse()
 
-	if err := env.Parse(&config); err != nil {
-		return nil, fmt.Errorf("error parsing env variables: %w", err)
-	}
-
-	if config.Config != "" {
-		data, err := os.ReadFile(config.Config)
+	if serverConfig.Config != "" {
+		data, err := os.ReadFile(serverConfig.Config)
 		if err != nil {
 			return nil, fmt.Errorf("error opening config file: %w", err)
 		}
-
 		var configFromFile ServerConfig
 		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&configFromFile); err != nil {
 			return nil, fmt.Errorf("error parsing json file config: %w", err)
 		}
-
-		if err := mergo.Merge(&config, configFromFile); err != nil {
+		if err := mergo.Merge(&serverConfig, configFromFile); err != nil {
 			return nil, fmt.Errorf("cannot merge configs: %w", err)
 		}
 	}
 
-	return &config, nil
+	return &serverConfig, env.Parse(&serverConfig)
 }
