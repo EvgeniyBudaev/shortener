@@ -4,6 +4,7 @@ package fs
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
 	"github.com/gin-gonic/gin"
@@ -168,4 +169,9 @@ func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) 
 		&models.URLRecordFS{UUID: strconv.Itoa(currentCount), UserID: userID, URLRecord: models.URLRecord{
 			OriginalURL: url, ShortURL: id,
 		}})
+}
+
+// GetStats метод получения
+func (s *FSStorage) GetStats() (*models.Stats, error) {
+	return nil, fmt.Errorf("not implemented")
 }

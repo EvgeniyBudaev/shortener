@@ -202,3 +202,15 @@ func (db *DBStore) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID 
 
 	return result, nil
 }
+
+// GetStats метод получения
+func (db *DBStore) GetStats() (*models.Stats, error) {
+	row := db.conn.QueryRow(context.Background(), "SELECT COUNT(*), COUNT(DISTINCT user_id) FROM shortener")
+	var result models.Stats
+	err := row.Scan(&result.URLs, &result.Users)
+	if err != nil {
+		return nil, fmt.Errorf("cant get stats: %w", err)
+	}
+
+	return &result, nil
+}

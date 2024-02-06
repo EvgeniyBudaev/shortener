@@ -12,6 +12,7 @@ import (
 	"github.com/EvgeniyBudaev/shortener/internal/store/postgres"
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.uber.org/zap"
 	"io"
 	"log"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 // Store Интерфейс содержит все необходимые методы для работы сервиса.
 type Store interface {
 	Get(ctx *gin.Context, id string) (string, error)
+	GetStats() (*models.Stats, error)
 	GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error)
 	DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error
 	Put(ctx *gin.Context, id string, shortURL string, userID string) (string, error)
@@ -32,13 +34,15 @@ type Store interface {
 type App struct {
 	Config *config.ServerConfig
 	store  Store
+	Logger *zap.SugaredLogger
 }
 
 // NewApp конструктор приложения
-func NewApp(config *config.ServerConfig, store Store) *App {
+func NewApp(config *config.ServerConfig, store Store, logger *zap.SugaredLogger) *App {
 	return &App{
 		Config: config,
 		store:  store,
+		Logger: logger,
 	}
 }
 
@@ -274,4 +278,14 @@ func (a *App) Ping(c *gin.Context) {
 		return
 	}
 	c.Writer.WriteHeader(http.StatusOK)
+}
+
+// GetStats метод получения
+func (a *App) GetStats(c *gin.Context) {
+	stats, err := a.store.GetStats()
+	if err != nil {
+		c.Writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	c.JSON(http.StatusOK, stats)
 }
