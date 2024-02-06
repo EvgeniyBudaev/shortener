@@ -2,6 +2,7 @@
 package memory
 
 import (
+	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/gin-gonic/gin"
 	"sync"
@@ -95,4 +96,9 @@ func (s *MemoryStorage) Ping() error {
 
 // Close метод закрытия соединения с БД
 func (s *MemoryStorage) Close() {
+}
+
+// GetStats метод получения
+func (s *MemoryStorage) GetStats() (*models.Stats, error) {
+	return nil, fmt.Errorf("not implemented")
 }

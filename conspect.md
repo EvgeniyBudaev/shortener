@@ -122,3 +122,9 @@ go get -u dario.cat/mergo
 
 ## Сборка с версионированием
 `go build -ldflags "-X main.buildVersion=0.0.1 -X 'main.buildDate=$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=xxx" cmd/shortner/main.go`
+
+gRPC
+```
+go get -u google.golang.org/grpc
+go get -u google.golang.org/protobuf
+```

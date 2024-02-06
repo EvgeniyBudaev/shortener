@@ -7,6 +7,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+var mainName = "main"
+
 // Analyzer конфигурация
 var Analyzer = &analysis.Analyzer{
 	Name: "osexitcheck",
@@ -17,11 +19,11 @@ var Analyzer = &analysis.Analyzer{
 // run запуск анализатора
 func run(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
-		if file.Name.Name == "main" {
+		if file.Name.Name == mainName {
 			ast.Inspect(file, func(node ast.Node) bool {
 				switch x := node.(type) {
 				case *ast.FuncDecl:
-					if x.Name.String() != "main" {
+					if x.Name.String() != mainName {
 						return false
 					}
 				case *ast.CallExpr:

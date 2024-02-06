@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/compress"
+	"github.com/EvgeniyBudaev/shortener/internal/logic"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/gin-contrib/pprof"
 	"log"
@@ -34,11 +35,14 @@ const (
 
 func setupRouter(a *app.App) *gin.Engine {
 	r := gin.New()
-	pprof.Register(r)
+	if a.Config.ProfileMode {
+		pprof.Register(r)
+	}
 	ginLoggerMiddleware, err := ginLogger.Logger()
 	if err != nil {
 		log.Fatal(err)
 	}
+	subnetAuthMiddleware := auth.NewSubnetChecker(a.Config.TrustedSubnet, a.Logger.Named("subnet_middleware"))
 	r.Use(ginLoggerMiddleware)
 	r.Use(auth.AuthMiddleware(a.Config.Seed))
 	r.Use(compress.Compress())
@@ -49,6 +53,12 @@ func setupRouter(a *app.App) *gin.Engine {
 
 	api := r.Group("/api")
 	{
+		internalAPI := api.Group("/internal")
+		internalAPI.Use(subnetAuthMiddleware)
+		{
+			internalAPI.GET("/stats", a.GetStats)
+		}
+
 		api.POST("/shorten", a.ShortURL)
 		api.POST("/shorten/batch", a.ShortenBatch)
 
@@ -88,9 +98,19 @@ func main() {
 		wg.Wait()
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer logger.Info("closed DB")
+		defer wg.Done()
+		<-ctx.Done()
+
+		storage.Close()
+	}()
+
 	componentsErrs := make(chan error, 1)
 
-	appInit := app.NewApp(appConfig, storage)
+	coreLogic := logic.NewCoreLogic(appConfig, storage, logger.Named("logic"))
+	appInit := app.NewApp(appConfig, coreLogic, logger.Named("app"))
 
 	r := setupRouter(appInit)
 	srv := http.Server{
