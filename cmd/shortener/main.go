@@ -39,6 +39,7 @@ func setupRouter(a *app.App) *gin.Engine {
 	if err != nil {
 		log.Fatal(err)
 	}
+	subnetAuthMiddleware := auth.NewSubnetChecker(a.Config.TrustedSubnet, a.Logger.Named("subnet_middleware"))
 	r.Use(ginLoggerMiddleware)
 	r.Use(auth.AuthMiddleware(a.Config.Seed))
 	r.Use(compress.Compress())
@@ -49,6 +50,12 @@ func setupRouter(a *app.App) *gin.Engine {
 
 	api := r.Group("/api")
 	{
+		internalAPI := api.Group("/internal")
+		internalAPI.Use(subnetAuthMiddleware)
+		{
+			internalAPI.GET("/stats", a.GetStats)
+		}
+
 		api.POST("/shorten", a.ShortURL)
 		api.POST("/shorten/batch", a.ShortenBatch)
 
@@ -90,7 +97,7 @@ func main() {
 
 	componentsErrs := make(chan error, 1)
 
-	appInit := app.NewApp(appConfig, storage)
+	appInit := app.NewApp(appConfig, storage, logger)
 
 	r := setupRouter(appInit)
 	srv := http.Server{
