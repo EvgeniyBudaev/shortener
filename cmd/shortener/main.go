@@ -39,7 +39,6 @@ func setupRouter(a *app.App) *gin.Engine {
 	if err != nil {
 		log.Fatal(err)
 	}
-	subnetAuthMiddleware := auth.NewSubnetChecker(a.Config.TrustedSubnet, a.Logger.Named("subnet_middleware"))
 	r.Use(ginLoggerMiddleware)
 	r.Use(auth.AuthMiddleware(a.Config.Seed))
 	r.Use(compress.Compress())
@@ -47,6 +46,8 @@ func setupRouter(a *app.App) *gin.Engine {
 	r.GET("/:id", a.RedirectURL)
 	r.POST("/", a.ShortURL)
 	r.GET("/ping", a.Ping)
+
+	subnetAuthMiddleware := auth.NewSubnetChecker(a.Config.TrustedSubnet, a.Logger)
 
 	api := r.Group("/api")
 	{
