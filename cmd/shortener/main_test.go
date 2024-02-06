@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/app"
+	"github.com/EvgeniyBudaev/shortener/internal/logic"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
 	"github.com/EvgeniyBudaev/shortener/internal/utils"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -69,7 +71,8 @@ func TestRedirectURL(t *testing.T) {
 				storage.Put(ctx, url, test.args.urls[url], "")
 			}
 
-			testApp := app.NewApp(&config.ServerConfig{}, storage)
+			coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+			testApp := app.NewApp(&config.ServerConfig{}, coreLogic, zap.L().Sugar())
 			r := setupRouter(testApp)
 			req := httptest.NewRequest(http.MethodGet, test.args.shortURL, nil)
 
@@ -130,7 +133,8 @@ func TestShortURLV1(t *testing.T) {
 				storage.Put(ctx, url, test.args.urls[url], "")
 			}
 
-			testApp := app.NewApp(&config.ServerConfig{}, storage)
+			coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+			testApp := app.NewApp(&config.ServerConfig{}, coreLogic, zap.L().Sugar())
 			r := setupRouter(testApp)
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBuffer([]byte(test.args.originalURL)))
 			req.Header.Add("Content-Type", "text/plain")
@@ -190,7 +194,8 @@ func TestShortURLV2(t *testing.T) {
 				storage.Put(ctx, url, tt.args.urls[url], "")
 			}
 
-			testApp := app.NewApp(&config.ServerConfig{}, storage)
+			coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+			testApp := app.NewApp(&config.ServerConfig{}, coreLogic, zap.L().Sugar())
 			r := setupRouter(testApp)
 			reqObj := models.ShortenReq{
 				URL: tt.args.originalURL,
@@ -224,7 +229,8 @@ func BenchmarkShortUrl(b *testing.B) {
 	}
 	defer storage.DeleteStorageFile()
 
-	testApp := app.NewApp(&config.ServerConfig{}, storage)
+	coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+	testApp := app.NewApp(&config.ServerConfig{}, coreLogic, zap.L().Sugar())
 	r := setupRouter(testApp)
 
 	b.ResetTimer()
