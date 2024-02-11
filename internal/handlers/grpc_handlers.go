@@ -45,7 +45,6 @@ func (gh *GRPCService) BatchCreateShortURL(
 		gh.logger.Error("shortenBatch service err", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-
 	result := []*pb.BatchCreateShortURLResponseData{}
 	for _, item := range res {
 		result = append(
@@ -55,7 +54,6 @@ func (gh *GRPCService) BatchCreateShortURL(
 				CorrelationId: item.CorrelationID,
 			})
 	}
-
 	return &pb.BatchCreateShortURLResponse{Records: result}, nil
 }
 
@@ -68,7 +66,6 @@ func (gh *GRPCService) GetByShort(
 		gh.logger.Error("redirectToOriginal service err", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-
 	return &pb.GetOriginalURLResponse{OriginalUrl: originalURL}, nil
 }
 

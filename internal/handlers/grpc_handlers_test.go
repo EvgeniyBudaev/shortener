@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/EvgeniyBudaev/shortener/internal/config"
 	"github.com/EvgeniyBudaev/shortener/internal/logic"
+	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/fs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -61,6 +62,54 @@ func TestCreateShortURL(t *testing.T) {
 				assert.Equal(t, tc.expectedOutput, resp.Result)
 			} else {
 				assert.Equal(t, tc.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestBatchCreateShortURL(t *testing.T) {
+	mockLogger, _ := zap.NewDevelopment()
+	testCases := []struct {
+		name         string
+		request      *pb.BatchCreateShortURLRequest
+		mockResponse []models.URLBatchRes
+		mockErr      error
+		expectedCode codes.Code
+	}{
+		{
+			name:         "Successful batch creation",
+			request:      &pb.BatchCreateShortURLRequest{ /* Заполните запрос */ },
+			mockResponse: []models.URLBatchRes{{ShortURL: "http://bit.ly/test", CorrelationID: "corr123"}},
+			expectedCode: codes.OK,
+		},
+		{
+			name:         "Error from core logic",
+			request:      &pb.BatchCreateShortURLRequest{ /* Заполните запрос */ },
+			mockErr:      errors.New("some error"),
+			expectedCode: codes.Internal,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			storage, err := fs.NewFileStorage("./test.json")
+			if err != nil {
+				t.Errorf("failed to initialize a new storage: %v", err)
+				return
+			}
+			defer storage.DeleteStorageFile()
+			coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+			service := &GRPCService{logger: mockLogger.Sugar(), coreLogic: coreLogic}
+			ctx := context.Background()
+			resp, err := service.BatchCreateShortURL(ctx, tc.request)
+			if tc.expectedCode == codes.OK {
+				assert.NoError(t, err)
+				assert.Len(t, resp.Records, len(tc.mockResponse))
+				assert.Equal(t, tc.mockResponse[0].ShortURL, resp.Records[0].ShortUrl)
+				assert.Equal(t, tc.mockResponse[0].CorrelationID, resp.Records[0].CorrelationId)
+			} else {
+				assert.Error(t, err)
+				st, _ := status.FromError(err)
+				assert.Equal(t, tc.expectedCode, st.Code())
 			}
 		})
 	}
