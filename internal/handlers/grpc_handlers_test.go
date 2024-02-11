@@ -114,3 +114,52 @@ func TestBatchCreateShortURL(t *testing.T) {
 		})
 	}
 }
+
+func TestGetByShort(t *testing.T) {
+	mockLogger, _ := zap.NewDevelopment()
+
+	testCases := []struct {
+		name         string
+		request      *pb.GetOriginalURLRequest
+		mockResponse string
+		mockErr      error
+		expectedCode codes.Code
+	}{
+		{
+			name:         "Successful retrieval",
+			request:      &pb.GetOriginalURLRequest{Url: "http://bit.ly/test"},
+			mockResponse: "http://example.com",
+			expectedCode: codes.OK,
+		},
+		{
+			name:         "Error from core logic",
+			request:      &pb.GetOriginalURLRequest{Url: "http://bit.ly/test"},
+			mockErr:      errors.New("some error"),
+			expectedCode: codes.Internal,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			storage, err := fs.NewFileStorage("./test.json")
+			if err != nil {
+				t.Errorf("failed to initialize a new storage: %v", err)
+				return
+			}
+			defer storage.DeleteStorageFile()
+			coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+			service := &GRPCService{logger: mockLogger.Sugar(), coreLogic: coreLogic}
+			ctx := context.Background()
+			resp, err := service.GetByShort(ctx, tc.request)
+
+			if tc.expectedCode == codes.OK {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.mockResponse, resp.OriginalUrl)
+			} else {
+				assert.Error(t, err)
+				st, _ := status.FromError(err)
+				assert.Equal(t, tc.expectedCode, st.Code())
+			}
+		})
+	}
+}
