@@ -2,9 +2,9 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
-	"github.com/gin-gonic/gin"
 	"sync"
 )
 
@@ -25,7 +25,7 @@ func NewMemoryStorage(records map[string]models.URLRecordMemory) (*MemoryStorage
 }
 
 // Put метод обновления счетчика URL
-func (s *MemoryStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+func (s *MemoryStorage) Put(ctx context.Context, id string, url string, userID string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.urls[id] = models.URLRecordMemory{
@@ -37,7 +37,7 @@ func (s *MemoryStorage) Put(ctx *gin.Context, id string, url string, userID stri
 }
 
 // Get метод для получения URL
-func (s *MemoryStorage) Get(ctx *gin.Context, id string) (string, error) {
+func (s *MemoryStorage) Get(ctx context.Context, id string) (string, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	originalURL := s.urls[id]
@@ -45,7 +45,7 @@ func (s *MemoryStorage) Get(ctx *gin.Context, id string) (string, error) {
 }
 
 // GetAllByUserID метод получения всех записей по ID пользователя
-func (s *MemoryStorage) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
+func (s *MemoryStorage) GetAllByUserID(ctx context.Context, userID string) ([]models.URLRecord, error) {
 	result := make([]models.URLRecord, 0)
 	for id, url := range s.urls {
 		if url.UserID == userID {
@@ -62,7 +62,7 @@ func (s *MemoryStorage) GetAllByUserID(ctx *gin.Context, userID string) ([]model
 }
 
 // DeleteMany метод по удалению URL по ID пользователя
-func (s *MemoryStorage) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error {
+func (s *MemoryStorage) DeleteMany(ctx context.Context, ids models.DeleteUserURLsReq, userID string) error {
 	for _, id := range ids {
 		if url, ok := s.urls[id]; ok && url.UserID == userID {
 			delete(s.urls, id)
@@ -72,7 +72,7 @@ func (s *MemoryStorage) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsRe
 }
 
 // PutBatch метод по обновлению батча по ID пользователя
-func (s *MemoryStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (s *MemoryStorage) PutBatch(ctx context.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {

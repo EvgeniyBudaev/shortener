@@ -2,8 +2,6 @@ package handlers
 
 import (
 	"context"
-	"github.com/gin-gonic/gin"
-
 	pb "github.com/EvgeniyBudaev/shortener/internal/handlers/proto"
 	"github.com/EvgeniyBudaev/shortener/internal/logic"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
@@ -23,7 +21,7 @@ func NewService(logger *zap.SugaredLogger, coreLogic *logic.CoreLogic) *GRPCServ
 }
 
 func (gh *GRPCService) CreateShortURL(
-	ctx *gin.Context,
+	ctx context.Context,
 	req *pb.CreateShortURLRequest,
 ) (*pb.CreateShortURLResponse, error) {
 	url, err := gh.coreLogic.ShortenURL(ctx, req.GetUserId(), req.GetUrl())
@@ -35,7 +33,7 @@ func (gh *GRPCService) CreateShortURL(
 }
 
 func (gh *GRPCService) BatchCreateShortURL(
-	ctx *gin.Context,
+	ctx context.Context,
 	req *pb.BatchCreateShortURLRequest,
 ) (*pb.BatchCreateShortURLResponse, error) {
 	items := []models.URLBatchReq{}
@@ -62,7 +60,7 @@ func (gh *GRPCService) BatchCreateShortURL(
 }
 
 func (gh *GRPCService) GetByShort(
-	ctx *gin.Context,
+	ctx context.Context,
 	req *pb.GetOriginalURLRequest,
 ) (*pb.GetOriginalURLResponse, error) {
 	originalURL, err := gh.coreLogic.GetOriginalURL(ctx, req.GetUrl())
@@ -75,7 +73,7 @@ func (gh *GRPCService) GetByShort(
 }
 
 func (gh *GRPCService) GetUserURLs(
-	ctx *gin.Context,
+	ctx context.Context,
 	req *pb.GetUserURLsRequest,
 ) (*pb.GetUserURLsResponse, error) {
 	urls, err := gh.coreLogic.GetUserRecords(ctx, req.GetUserId())
@@ -91,7 +89,7 @@ func (gh *GRPCService) GetUserURLs(
 }
 
 func (gh *GRPCService) DeleteUserURLsBatch(
-	ctx *gin.Context,
+	ctx context.Context,
 	req *pb.DeleteUserURLsBatchRequest,
 ) (*pb.DeleteUserURLsBatchResponse, error) {
 	if err := gh.coreLogic.DeleteUserRecords(ctx, req.GetUserId(), req.GetUrls()); err != nil {

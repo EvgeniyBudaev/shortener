@@ -2,12 +2,12 @@
 package fs
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
 	"github.com/EvgeniyBudaev/shortener/internal/store/memory"
-	"github.com/gin-gonic/gin"
 	"io"
 	"os"
 	"strconv"
@@ -54,7 +54,7 @@ func NewFileStorage(filename string) (*FSStorage, error) {
 }
 
 // PutBatch метод обновления батча
-func (s *FSStorage) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (s *FSStorage) PutBatch(ctx context.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	result := make([]models.URLBatchRes, 0)
 
 	for _, url := range urls {
@@ -157,7 +157,7 @@ func (sw *StorageWriter) AppendToFile(r *models.URLRecordFS) error {
 }
 
 // Put метод обновления
-func (s *FSStorage) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+func (s *FSStorage) Put(ctx context.Context, id string, url string, userID string) (string, error) {
 	id, err := s.MemoryStorage.Put(ctx, id, url, userID)
 	if err != nil {
 		return "", err

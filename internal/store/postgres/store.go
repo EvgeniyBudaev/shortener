@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/models"
-	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -79,7 +78,7 @@ func (db *DBStore) Close() {
 }
 
 // Get метод получения записи по ID
-func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
+func (db *DBStore) Get(ctx context.Context, id string) (string, error) {
 	row := db.conn.QueryRow(ctx,
 		"SELECT original_url, deleted_flag FROM shortener WHERE slug = $1", id)
 	var result string
@@ -95,7 +94,7 @@ func (db *DBStore) Get(ctx *gin.Context, id string) (string, error) {
 }
 
 // GetAllByUserID метод получения всех записей по ID пользователя
-func (db *DBStore) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URLRecord, error) {
+func (db *DBStore) GetAllByUserID(ctx context.Context, userID string) ([]models.URLRecord, error) {
 	result := make([]models.URLRecord, 0)
 
 	rows, err := db.conn.Query(ctx, `
@@ -121,7 +120,7 @@ func (db *DBStore) GetAllByUserID(ctx *gin.Context, userID string) ([]models.URL
 }
 
 // DeleteMany метод удаления записей по ID пользователя
-func (db *DBStore) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, userID string) error {
+func (db *DBStore) DeleteMany(ctx context.Context, ids models.DeleteUserURLsReq, userID string) error {
 	query := `
 		UPDATE shortener SET deleted_flag = TRUE
 		WHERE shortener.slug = $1 AND shortener.user_id = $2`
@@ -144,7 +143,7 @@ func (db *DBStore) DeleteMany(ctx *gin.Context, ids models.DeleteUserURLsReq, us
 }
 
 // Put метод обновления записи по ID пользователя
-func (db *DBStore) Put(ctx *gin.Context, id string, url string, userID string) (string, error) {
+func (db *DBStore) Put(ctx context.Context, id string, url string, userID string) (string, error) {
 	var err error
 
 	row := db.conn.QueryRow(ctx, `
@@ -167,7 +166,7 @@ func (db *DBStore) Put(ctx *gin.Context, id string, url string, userID string) (
 }
 
 // PutBatch метод обновления батча по ID пользователя
-func (db *DBStore) PutBatch(ctx *gin.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
+func (db *DBStore) PutBatch(ctx context.Context, urls []models.URLBatchReq, userID string) ([]models.URLBatchRes, error) {
 	query := `
 		INSERT INTO shortener VALUES (@slug, @originalUrl, @userID)
 		ON CONFLICT (original_url)

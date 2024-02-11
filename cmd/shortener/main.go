@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"github.com/EvgeniyBudaev/shortener/internal/auth"
 	"github.com/EvgeniyBudaev/shortener/internal/compress"
+	"github.com/EvgeniyBudaev/shortener/internal/handlers"
+	pb "github.com/EvgeniyBudaev/shortener/internal/handlers/proto"
 	"github.com/EvgeniyBudaev/shortener/internal/logic"
 	"github.com/EvgeniyBudaev/shortener/internal/store"
 	"github.com/gin-contrib/pprof"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"log"
+	"net"
 	"net/http"
 	"os/signal"
 	"sync"
@@ -147,6 +152,29 @@ func main() {
 			}
 		}
 	}(componentsErrs)
+
+	if appConfig.GRPCPort != "" {
+		wg.Add(1)
+		go func(errs chan<- error) {
+			defer wg.Done()
+			lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appConfig.GRPCPort))
+			if err != nil {
+				logger.Errorf("failed to listen: %w", err)
+				errs <- err
+				return
+			}
+			grpcServer := grpc.NewServer()
+			reflection.Register(grpcServer)
+			pb.RegisterShortenerServer(grpcServer, handlers.NewService(logger, coreLogic))
+			logger.Infof("running gRPC service on %s", appConfig.GRPCPort)
+			if err = grpcServer.Serve(lis); err != nil {
+				if errors.Is(err, grpc.ErrServerStopped) {
+					return
+				}
+				errs <- err
+			}
+		}(componentsErrs)
+	}
 
 	wg.Add(1)
 	go func() {
