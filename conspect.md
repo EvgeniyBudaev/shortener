@@ -1,3 +1,18 @@
+Инициализация зависимостей
+```
+go mod init github.com/EvgeniyBudaev/shortener
+```
+
+Сборка
+```
+go build -v ./cmd/
+```
+
+Удаление неиспользуемых зависимостей
+```
+go mod tidy -v
+```
+
 Пакет logrus для логирования
 go get github.com/sirupsen/logrus
 
@@ -122,3 +137,16 @@ go get -u dario.cat/mergo
 
 ## Сборка с версионированием
 `go build -ldflags "-X main.buildVersion=0.0.1 -X 'main.buildDate=$(date +'%Y/%m/%d %H:%M:%S')' -X main.buildCommit=xxx" cmd/shortner/main.go`
+
+gRPC
+Protocol Buffer Compiler Installation
+https://grpc.io/docs/protoc-installation/
+```
+sudo apt install -y protobuf-compiler
+protoc --version
+```
+После этого установите утилиты, которые отвечают за кодогенерацию go-файлов:
+```
+go get -u google.golang.org/grpc
+go get -u google.golang.org/protobuf
+```

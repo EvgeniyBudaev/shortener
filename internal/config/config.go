@@ -20,6 +20,9 @@ type ServerConfig struct {
 	DatabaseDSN     string `json:"database_dsn" env:"DATABASE_DSN"`
 	Seed            string `json:"-" env:"SEED"`
 	Config          string `json:"-" env:"CONFIG"`
+	TrustedSubnet   string `json:"trusted_subnet" env:"TRUSTED_SUBNET"`
+	GRPCPort        string `json:"grpc_port" env:"GRPC_PORT"`
+	ProfileMode     bool   `json:"profile_mode" env:"PROFILE_MODE"`
 }
 
 var serverConfig ServerConfig
@@ -33,6 +36,9 @@ func ParseFlags() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.DatabaseDSN, "d", "", "Data Source Name (DSN)")
 	flag.StringVar(&serverConfig.Seed, "e", "b4952c3809196592c026529df00774e46bfb5be0", "seed")
 	flag.StringVar(&serverConfig.Config, "c", "", "Config json file path")
+	flag.StringVar(&serverConfig.TrustedSubnet, "t", "", "trusted CIDR (ex. 192.168.0.0/24)")
+	flag.StringVar(&serverConfig.GRPCPort, "grpc", "", "will add listener to port if specified")
+	flag.BoolVar(&serverConfig.ProfileMode, "p", false, "register pprof profiler")
 	flag.Parse()
 
 	if serverConfig.Config != "" {
