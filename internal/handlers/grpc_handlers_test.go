@@ -117,7 +117,6 @@ func TestBatchCreateShortURL(t *testing.T) {
 
 func TestGetByShort(t *testing.T) {
 	mockLogger, _ := zap.NewDevelopment()
-
 	testCases := []struct {
 		name         string
 		request      *pb.GetOriginalURLRequest
@@ -155,6 +154,54 @@ func TestGetByShort(t *testing.T) {
 			if tc.expectedCode == codes.OK {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.mockResponse, resp.OriginalUrl)
+			} else {
+				assert.Error(t, err)
+				st, _ := status.FromError(err)
+				assert.Equal(t, tc.expectedCode, st.Code())
+			}
+		})
+	}
+}
+
+func TestGetUserURLs(t *testing.T) {
+	mockLogger, _ := zap.NewDevelopment()
+	testCases := []struct {
+		name         string
+		request      *pb.GetUserURLsRequest
+		mockResponse []models.URLRecord
+		mockErr      error
+		expectedCode codes.Code
+	}{
+		{
+			name:         "Успешное получение списка URL пользователя",
+			request:      &pb.GetUserURLsRequest{UserId: "user123"},
+			mockResponse: []models.URLRecord{{ShortURL: "http://bit.ly/test1", OriginalURL: "http://example.com/test1"}},
+			expectedCode: codes.OK,
+		},
+		{
+			name:         "Ошибка при получении списка URL пользователя",
+			request:      &pb.GetUserURLsRequest{UserId: "user123"},
+			mockErr:      errors.New("ошибка получения данных"),
+			expectedCode: codes.Internal,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			storage, err := fs.NewFileStorage("./test.json")
+			if err != nil {
+				t.Errorf("failed to initialize a new storage: %v", err)
+				return
+			}
+			defer storage.DeleteStorageFile()
+			coreLogic := logic.NewCoreLogic(&config.ServerConfig{}, storage, zap.L().Sugar())
+			service := &GRPCService{logger: mockLogger.Sugar(), coreLogic: coreLogic}
+			ctx := context.Background()
+			resp, err := service.GetUserURLs(ctx, tc.request)
+			if tc.expectedCode == codes.OK {
+				assert.NoError(t, err)
+				assert.Len(t, resp.Records, len(tc.mockResponse))
+				assert.Equal(t, tc.mockResponse[0].ShortURL, resp.Records[0].ShortUrl)
+				assert.Equal(t, tc.mockResponse[0].OriginalURL, resp.Records[0].OriginalUrl)
 			} else {
 				assert.Error(t, err)
 				st, _ := status.FromError(err)

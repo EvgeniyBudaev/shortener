@@ -105,6 +105,5 @@ func (gh *GRPCService) GetStats(
 		gh.logger.Error("getStats service err", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-
 	return &pb.ServiceStatsResponse{Urls: int64(stats.URLs), Users: int64(stats.Users)}, nil
 }
